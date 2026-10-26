@@ -100,7 +100,7 @@ export function AiReceiptButton({ onParsed, onError, className }: AiReceiptButto
         size="sm"
         onClick={handleClick}
         disabled={loading}
-        className="bg-gradient-to-r from-violet-600 to-indigo-600 text-white hover:from-violet-700 hover:to-indigo-700 border-0 shadow-md shadow-violet-500/20 hover:shadow-lg hover:shadow-violet-500/30"
+        className="bg-primary hover:bg-[#1e4d3f] text-primary-foreground border-0 shadow-md shadow-primary/20 hover:shadow-lg hover:shadow-primary/30"
       >
         {loading ? (
           <>

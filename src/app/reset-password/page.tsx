@@ -123,7 +123,7 @@ function ResetPasswordInner() {
               Reset password
             </Button>
             <div className="text-center pt-2">
-              <Link href="/login" className="text-sm text-blue-600 hover:underline inline-flex items-center gap-1">
+              <Link href="/login" className="text-sm text-primary dark:text-secondary hover:underline inline-flex items-center gap-1">
                 <ArrowLeft className="h-3 w-3" /> Back to sign in
               </Link>
             </div>

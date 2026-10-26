@@ -39,10 +39,10 @@ export const Checkbox = React.forwardRef<HTMLInputElement, CheckboxProps>(
           "inline-flex items-center justify-center shrink-0 rounded border transition-colors cursor-pointer",
           "h-4 w-4",
           isChecked
-            ? "bg-blue-600 border-blue-600 text-white"
+            ? "bg-primary border-primary text-primary-foreground"
             : isIndeterminate
-            ? "bg-blue-600 border-blue-600 text-white"
-            : "bg-white dark:bg-slate-900 border-slate-300 dark:border-slate-700 hover:border-blue-500",
+            ? "bg-primary border-primary text-primary-foreground"
+            : "bg-card border-border hover:border-primary",
           disabled && "opacity-50 cursor-not-allowed",
           className,
         )}

@@ -6,14 +6,14 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 
 const PRESETS = [
-  "#2563eb", // default blue
-  "#7c3aed", // violet
-  "#db2777", // pink
-  "#dc2626", // red
-  "#f59e0b", // amber
-  "#10b981", // emerald
-  "#0891b2", // cyan
-  "#0f172a", // slate
+  "#173D32", // Forest green (default)
+  "#10b981", // Emerald
+  "#E8A23A", // Amber
+  "#DC5353", // Muted red
+  "#0891b2", // Cyan
+  "#7c3aed", // Violet
+  "#db2777", // Pink
+  "#0f172a", // Slate
 ];
 
 interface BrandColorPickerProps {
@@ -46,12 +46,12 @@ export function BrandColorPicker({ value, onChange, label = "Brand color", id }:
         {/* Native color input (looks different per browser but offers picker) */}
         <label
           className="relative h-11 w-11 shrink-0 overflow-hidden rounded-lg border border-slate-200 dark:border-slate-700 cursor-pointer shadow-sm"
-          style={{ backgroundColor: normalized || "#2563eb" }}
+          style={{ backgroundColor: normalized || "#173D32" }}
           title="Pick a color"
         >
           <input
             type="color"
-            value={normalized || "#2563eb"}
+            value={normalized || "#173D32"}
             onChange={(e) => commit(e.target.value)}
             className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
             aria-label="Pick brand color"
@@ -69,7 +69,7 @@ export function BrandColorPicker({ value, onChange, label = "Brand color", id }:
               commit((e.target as HTMLInputElement).value);
             }
           }}
-          placeholder="#2563eb"
+          placeholder="#173D32"
           className="h-11 font-mono uppercase"
           maxLength={7}
         />

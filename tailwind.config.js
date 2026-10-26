@@ -33,6 +33,10 @@ module.exports = {
           DEFAULT: "hsl(var(--destructive))",
           foreground: "hsl(var(--destructive-foreground))",
         },
+        warning: {
+          DEFAULT: "hsl(var(--warning))",
+          foreground: "hsl(var(--warning-foreground))",
+        },
         muted: {
           DEFAULT: "hsl(var(--muted))",
           foreground: "hsl(var(--muted-foreground))",
@@ -44,6 +48,31 @@ module.exports = {
         card: {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
+        },
+        mandi: {
+          forest: "#173D32",
+          "forest-hover": "#1e4d3f",
+          warm: "#F7F7F2",
+          white: "#FFFFFF",
+          mint: "#DCEFE3",
+          "mint-light": "#EBF6F0",
+          amber: "#E8A23A",
+          red: "#DC5353",
+          text: "#202722",
+          muted: "#68736C",
+          border: "#E5E8E2",
+        },
+        brand: {
+          forest: "#173D32",
+          "forest-hover": "#1e4d3f",
+          warm: "#F7F7F2",
+          white: "#FFFFFF",
+          mint: "#DCEFE3",
+          amber: "#E8A23A",
+          red: "#DC5353",
+          text: "#202722",
+          muted: "#68736C",
+          border: "#E5E8E2",
         },
       },
       borderRadius: {

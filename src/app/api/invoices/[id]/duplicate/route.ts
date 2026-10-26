@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireUser, unauthorized, jsonError } from "@/lib/api-helpers";
-import { generateInvoiceNumber, calculateInvoiceTotals } from "@/lib/utils";
+import { calculateInvoiceTotals } from "@/lib/utils";
+import { allocateNextInvoiceNumber } from "@/lib/invoice-sequencer";
 import { logActivity, clientIp } from "@/lib/activity";
 
 interface RouteParams {
@@ -65,51 +66,46 @@ export async function POST(request: Request, { params }: RouteParams) {
       : {};
 
     const totals = calculateInvoiceTotals(
-      lineItems.map((li) => ({ quantity: li.quantity, price: li.price })),
+      lineItems.map((li) => ({ quantity: Number(li.quantity), price: li.price })),
       Number(source.taxRate),
       discount
     );
 
-    // Generate next invoice number using today's count and user's prefix
-    const startOfDay = new Date();
-    startOfDay.setHours(0, 0, 0, 0);
-    const endOfDay = new Date();
-    endOfDay.setHours(23, 59, 59, 999);
-    const todayCount = await prisma.invoice.count({
-      where: { userId: user.id, createdAt: { gte: startOfDay, lte: endOfDay } },
-    });
-    const invoiceNumber = generateInvoiceNumber(todayCount, {
-      prefix: settings?.invoicePrefix ?? "INV",
-      separator: settings?.invoiceSeparator || "-",
-      pad: Number(settings?.invoicePad) || 4,
-    });
+    // Concurrency-safe invoice number allocation using DailySequence inside an atomic transaction
+    const invoice = await prisma.$transaction(async (tx) => {
+      const invoiceNumber = await allocateNextInvoiceNumber(tx, user.id, {
+        prefix: settings?.invoicePrefix ?? "INV",
+        separator: settings?.invoiceSeparator || "-",
+        pad: Number(settings?.invoicePad) || 4,
+      });
 
-    const invoice = await prisma.invoice.create({
-      data: {
-        userId: user.id,
-        invoiceNumber,
-        clientId: overrideClientId,
-        status: "DRAFT",
-        issueDate,
-        dueDate,
-        subtotal: totals.subtotal,
-        discountType: source.discountType,
-        discountValue: source.discountValue,
-        discountAmount: totals.discountAmount,
-        taxRate: source.taxRate,
-        taxLabel: source.taxLabel || "GST",
-        totalAmount: totals.total,
-        notes: source.notes,
-        items: {
-          create: lineItems.map((li) => ({
-            description: li.description,
-            quantity: li.quantity,
-            price: li.price,
-            total: li.total,
-          })),
+      return tx.invoice.create({
+        data: {
+          userId: user.id,
+          invoiceNumber,
+          clientId: overrideClientId,
+          status: "DRAFT",
+          issueDate,
+          dueDate,
+          subtotal: totals.subtotal,
+          discountType: source.discountType,
+          discountValue: source.discountValue,
+          discountAmount: totals.discountAmount,
+          taxRate: source.taxRate,
+          taxLabel: source.taxLabel || "GST",
+          totalAmount: totals.total,
+          notes: source.notes,
+          items: {
+            create: lineItems.map((li) => ({
+              description: li.description,
+              quantity: li.quantity,
+              price: li.price,
+              total: li.total,
+            })),
+          },
         },
-      },
-      include: { client: true, items: true },
+        include: { client: true, items: true },
+      });
     });
 
     logActivity({

@@ -27,8 +27,7 @@ const PUBLIC_PATHS = [
   "/og.png",
 ];
 
-// Routes requiring authentication
-const PROTECTED_PREFIXES = ["/dashboard", "/invoices", "/clients", "/settings", "/recurring", "/expenses"];
+const PROTECTED_PREFIXES = ["/dashboard", "/invoices", "/clients", "/settings", "/recurring", "/expenses", "/fruits", "/prices"];
 
 function isProtected(pathname: string) {
   return PROTECTED_PREFIXES.some(

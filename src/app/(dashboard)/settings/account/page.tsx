@@ -197,7 +197,7 @@ export default function AccountSettingsPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-24">
-        <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     );
   }
@@ -237,8 +237,8 @@ export default function AccountSettingsPage() {
         <Card className="border-slate-200/60 dark:border-slate-800/60">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
-              <span className="h-7 w-7 rounded-lg bg-blue-100 dark:bg-blue-900/50 flex items-center justify-center">
-                <User className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+              <span className="h-7 w-7 rounded-lg bg-secondary text-primary dark:bg-primary/30 dark:text-secondary flex items-center justify-center">
+                <User className="h-4 w-4 text-primary dark:text-secondary" />
               </span>
               Profile Information
             </CardTitle>
@@ -354,7 +354,7 @@ export default function AccountSettingsPage() {
             <Button
               type="submit"
               disabled={saving}
-              className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-lg shadow-blue-500/25"
+              className="bg-primary hover:bg-[#1e4d3f] text-primary-foreground shadow-lg shadow-primary/25"
             >
               {saving ? (
                 <>

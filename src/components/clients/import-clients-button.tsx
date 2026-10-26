@@ -154,7 +154,7 @@ export function ImportClientsButton({ onImported, variant = "outline", size = "s
               className={[
                 "flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed p-8 cursor-pointer transition-colors text-center",
                 dragOver
-                  ? "border-blue-400 bg-blue-50 dark:bg-blue-950/30"
+                  ? "border-primary bg-secondary/30 dark:bg-primary/20"
                   : "border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 bg-slate-50/60 dark:bg-slate-900/30",
               ].join(" ")}
             >
@@ -254,7 +254,7 @@ export function ImportClientsButton({ onImported, variant = "outline", size = "s
               type="button"
               onClick={handleImport}
               disabled={!file || parsedRows === 0 || parseErrors.length > 0 || importing}
-              className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700"
+              className="bg-primary hover:bg-[#1e4d3f] text-primary-foreground"
             >
               {importing ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Upload className="h-4 w-4 mr-2" />}
               {importing ? "Importing…" : `Import ${parsedRows || ""} row${parsedRows === 1 ? "" : "s"}`}

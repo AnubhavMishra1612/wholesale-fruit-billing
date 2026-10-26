@@ -41,7 +41,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { formatCurrency, formatDate } from "@/lib/utils";
-import type { InvoiceWithRelations } from "@/types";
+import type { InvoiceWithRelations, InvoiceStatus } from "@/types";
 
 interface SummaryResponse {
   totalRevenue: number;
@@ -110,10 +110,10 @@ const toneClasses: Record<
   }
 > = {
   blue: {
-    icon: "text-blue-600 dark:text-blue-300",
-    iconBox: "bg-blue-50 dark:bg-blue-950/60",
-    accent: "bg-blue-500",
-    hover: "hover:border-blue-300 dark:hover:border-blue-800",
+    icon: "text-primary dark:text-secondary",
+    iconBox: "bg-secondary text-primary dark:bg-primary/30 dark:text-secondary",
+    accent: "bg-primary",
+    hover: "hover:border-primary",
   },
   amber: {
     icon: "text-amber-600 dark:text-amber-300",
@@ -172,13 +172,17 @@ function formatCompactAmount(value: number, currency: string): string {
 function StatusBadge({
   status,
 }: {
-  status: "DRAFT" | "PENDING" | "PAID" | "VOID";
+  status: InvoiceStatus;
 }) {
-  const config = {
-    DRAFT: { variant: "draft" as const, label: "Draft" },
-    PENDING: { variant: "warning" as const, label: "Pending" },
-    PAID: { variant: "success" as const, label: "Paid" },
-    VOID: { variant: "neutral" as const, label: "Void" },
+  const config: Record<
+    InvoiceStatus,
+    { variant: "draft" | "warning" | "success" | "neutral"; label: string }
+  > = {
+    DRAFT: { variant: "draft", label: "Draft" },
+    PENDING: { variant: "warning", label: "Pending" },
+    PARTIALLY_PAID: { variant: "warning", label: "Partially Paid" },
+    PAID: { variant: "success", label: "Paid" },
+    VOID: { variant: "neutral", label: "Void" },
   };
 
   const { variant, label } = config[status];
@@ -318,7 +322,7 @@ export default function DashboardPage() {
     <PageTransition className="space-y-6 lg:space-y-8">
       <section className="no-print flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="mb-1 text-sm font-medium text-blue-600 dark:text-blue-400">
+          <p className="mb-1 text-sm font-medium text-primary dark:text-secondary">
             Business overview
           </p>
           <h1 className="text-3xl font-bold tracking-tight text-slate-950 dark:text-white">
@@ -462,8 +466,8 @@ export default function DashboardPage() {
 
             <Card className="border-slate-200/70 shadow-none dark:border-slate-800">
               <CardContent className="flex items-center gap-3 p-4">
-                <div className="rounded-lg bg-indigo-50 p-2 dark:bg-indigo-950/50">
-                  <Users className="h-4 w-4 text-indigo-600 dark:text-indigo-300" />
+                <div className="rounded-lg bg-secondary p-2 dark:bg-primary/40">
+                  <Users className="h-4 w-4 text-primary dark:text-secondary" />
                 </div>
                 <div>
                   <p className="text-xs text-slate-500 dark:text-slate-400">
@@ -478,8 +482,8 @@ export default function DashboardPage() {
 
             <Card className="border-slate-200/70 shadow-none dark:border-slate-800">
               <CardContent className="flex items-center gap-3 p-4">
-                <div className="rounded-lg bg-blue-50 p-2 dark:bg-blue-950/50">
-                  <CheckCircle2 className="h-4 w-4 text-blue-600 dark:text-blue-300" />
+                <div className="rounded-lg bg-secondary text-primary dark:bg-primary/30 dark:text-secondary p-2">
+                  <CheckCircle2 className="h-4 w-4 text-primary dark:text-secondary" />
                 </div>
                 <div>
                   <p className="text-xs text-slate-500 dark:text-slate-400">
@@ -538,7 +542,7 @@ export default function DashboardPage() {
 
               <Link
                 href="/invoices"
-                className="no-print flex items-center gap-1 text-sm font-medium text-blue-600 transition-all hover:gap-2 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
+                className="no-print flex items-center gap-1 text-sm font-medium text-primary transition-all hover:gap-2 hover:text-primary/80 dark:text-secondary dark:hover:text-secondary/80"
               >
                 View all
                 <ArrowRight className="h-4 w-4" />
@@ -567,7 +571,7 @@ export default function DashboardPage() {
                       <TableCell className="font-medium">
                         <Link
                           href={`/invoices/${invoice.id}`}
-                          className="text-blue-600 hover:underline group-hover:text-blue-700 dark:text-blue-400 dark:group-hover:text-blue-300"
+                          className="text-primary hover:underline group-hover:text-primary/80 dark:text-secondary dark:group-hover:text-secondary/80"
                         >
                           {invoice.invoiceNumber}
                         </Link>
@@ -575,7 +579,7 @@ export default function DashboardPage() {
 
                       <TableCell>
                         <div className="flex items-center gap-2.5">
-                          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-100 text-xs font-semibold text-blue-700 dark:bg-blue-950 dark:text-blue-300">
+                          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-secondary text-xs font-semibold text-primary dark:bg-primary/40 dark:text-secondary">
                             {invoice.client.name.charAt(0).toUpperCase()}
                           </div>
                           <span className="truncate font-medium text-slate-900 dark:text-slate-200">

@@ -33,7 +33,7 @@ import {
 } from "lucide-react";
 import { formatDate } from "@/lib/utils";
 import { formatMoney } from "@/lib/format-money";
-import type { InvoiceWithRelations } from "@/types";
+import type { InvoiceWithRelations, InvoiceStatus } from "@/types";
 import { DownloadPdfButton } from "@/components/invoices/download-pdf-button";
 import { PayInvoiceButton } from "@/components/invoices/pay-invoice-button";
 import { PayMethods } from "@/components/invoices/pay-methods";
@@ -56,12 +56,16 @@ interface CompanySettings {
   payments?: PaymentGatewayConfig;
 }
 
-function StatusBadge({ status }: { status: "DRAFT" | "PENDING" | "PAID" | "VOID" }) {
-  const config = {
-    DRAFT: { variant: "draft" as const, label: "Draft", icon: Clock },
-    PENDING: { variant: "warning" as const, label: "Awaiting Payment", icon: Clock },
-    PAID: { variant: "success" as const, label: "Paid", icon: CheckCircle2 },
-    VOID: { variant: "neutral" as const, label: "Void / Cancelled", icon: Ban },
+function StatusBadge({ status }: { status: InvoiceStatus }) {
+  const config: Record<
+    InvoiceStatus,
+    { variant: "draft" | "warning" | "success" | "neutral"; label: string; icon: typeof Clock }
+  > = {
+    DRAFT: { variant: "draft", label: "Draft", icon: Clock },
+    PENDING: { variant: "warning", label: "Awaiting Payment", icon: Clock },
+    PARTIALLY_PAID: { variant: "warning", label: "Partially Paid", icon: Clock },
+    PAID: { variant: "success", label: "Paid", icon: CheckCircle2 },
+    VOID: { variant: "neutral", label: "Void / Cancelled", icon: Ban },
   };
   const { variant, label, icon: Icon } = config[status] ?? config.DRAFT;
   return (
@@ -140,11 +144,11 @@ function PublicInvoiceViewInner() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 relative overflow-hidden">
-        <div className="absolute top-0 -left-40 w-96 h-96 bg-blue-400/20 dark:bg-blue-500/10 rounded-full blur-3xl" />
-        <div className="absolute bottom-0 -right-40 w-96 h-96 bg-indigo-400/20 dark:bg-indigo-500/10 rounded-full blur-3xl" />
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-secondary/20 to-background relative overflow-hidden">
+        <div className="absolute top-0 -left-40 w-96 h-96 bg-primary/10 rounded-full blur-3xl" />
+        <div className="absolute bottom-0 -right-40 w-96 h-96 bg-secondary/30 rounded-full blur-3xl" />
         <div className="relative z-10 text-center">
-          <Loader2 className="h-10 w-10 animate-spin text-blue-600 mx-auto" />
+          <Loader2 className="h-10 w-10 animate-spin text-primary mx-auto" />
           <p className="text-sm text-slate-500 dark:text-slate-400 mt-4">Loading invoice...</p>
         </div>
       </div>
@@ -153,9 +157,9 @@ function PublicInvoiceViewInner() {
 
   if (error || !invoice) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 flex items-center justify-center p-4 relative overflow-hidden">
-        <div className="absolute top-0 -left-40 w-96 h-96 bg-blue-400/20 dark:bg-blue-500/10 rounded-full blur-3xl" />
-        <div className="absolute bottom-0 -right-40 w-96 h-96 bg-indigo-400/20 dark:bg-indigo-500/10 rounded-full blur-3xl" />
+      <div className="min-h-screen bg-gradient-to-br from-background via-secondary/20 to-background flex items-center justify-center p-4 relative overflow-hidden">
+        <div className="absolute top-0 -left-40 w-96 h-96 bg-primary/10 rounded-full blur-3xl" />
+        <div className="absolute bottom-0 -right-40 w-96 h-96 bg-secondary/30 rounded-full blur-3xl" />
         <Card className="max-w-md w-full relative z-10 shadow-xl border-slate-200/60 dark:border-slate-800/60 backdrop-blur-sm">
           <CardContent className="py-12 px-8 text-center">
             <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-slate-200 to-slate-300 dark:from-slate-800 dark:to-slate-700 shadow-inner">
@@ -224,13 +228,13 @@ function PublicInvoiceViewInner() {
     ? "from-red-500 to-rose-500"
     : isDraft
     ? "from-slate-400 to-slate-500"
-    : "from-blue-500 to-indigo-500";
+    : "from-primary to-[#1e4d3f]";
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 py-8 px-4 relative overflow-hidden">
+    <div className="min-h-screen bg-gradient-to-br from-background via-secondary/20 to-background py-8 px-4 relative overflow-hidden">
       {/* Decorative orbs */}
-      <div className="absolute top-0 -left-40 w-96 h-96 bg-blue-400/20 dark:bg-blue-500/10 rounded-full blur-3xl pointer-events-none no-print" />
-      <div className="absolute bottom-0 -right-40 w-96 h-96 bg-indigo-400/20 dark:bg-indigo-500/10 rounded-full blur-3xl pointer-events-none no-print" />
+      <div className="absolute top-0 -left-40 w-96 h-96 bg-primary/10 rounded-full blur-3xl pointer-events-none no-print" />
+      <div className="absolute bottom-0 -right-40 w-96 h-96 bg-secondary/30 rounded-full blur-3xl pointer-events-none no-print" />
 
       <div className="max-w-3xl mx-auto space-y-4 relative z-10">
         {/* Secure banner */}
@@ -372,7 +376,7 @@ function PublicInvoiceViewInner() {
                       ? "from-emerald-600 to-green-600 dark:from-emerald-400 dark:to-green-400"
                       : isOverdue
                       ? "from-red-600 to-rose-600 dark:from-red-400 dark:to-rose-400"
-                      : "from-blue-600 to-indigo-600 dark:from-blue-400 dark:to-indigo-400"
+                      : "from-primary to-[#1e4d3f] dark:from-secondary dark:to-primary"
                   } bg-clip-text text-transparent tabular-nums`}>
                     {formatMoney(totalNum, currency)}
                   </p>
@@ -390,7 +394,7 @@ function PublicInvoiceViewInner() {
                   <p className="font-bold text-lg text-slate-900 dark:text-white">{companyName}</p>
                   <p className="text-sm text-slate-600 dark:text-slate-400 flex items-center gap-1.5">
                     <Mail className="h-3.5 w-3.5 text-slate-400" />
-                    <a href={`mailto:${companyEmail}`} className="text-blue-600 dark:text-blue-400 hover:underline">{companyEmail}</a>
+                    <a href={`mailto:${companyEmail}`} className="text-primary dark:text-secondary hover:underline">{companyEmail}</a>
                   </p>
                   {companyPhone && (
                     <p className="text-sm text-slate-600 dark:text-slate-400 flex items-center gap-1.5">
@@ -405,8 +409,8 @@ function PublicInvoiceViewInner() {
                 </div>
               </div>
 
-              <div className="bg-blue-50/50 dark:bg-blue-950/20 rounded-xl p-5 border border-blue-100 dark:border-blue-900/30">
-                <p className="text-xs uppercase tracking-wider text-blue-700 dark:text-blue-400 mb-3 font-bold flex items-center gap-1.5">
+              <div className="bg-secondary/30 dark:bg-primary/20 rounded-xl p-5 border border-border">
+                <p className="text-xs uppercase tracking-wider text-primary dark:text-secondary mb-3 font-bold flex items-center gap-1.5">
                   <Receipt className="h-3 w-3" /> Bill To
                 </p>
                 <div className="flex items-start gap-3">
@@ -415,7 +419,7 @@ function PublicInvoiceViewInner() {
                     <p className="font-bold text-lg text-slate-900 dark:text-white truncate">{invoice.client.name}</p>
                     <p className="text-sm text-slate-600 dark:text-slate-400 flex items-center gap-1.5">
                       <Mail className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-                      <a href={`mailto:${invoice.client.email}`} className="text-blue-600 dark:text-blue-400 hover:underline truncate">{invoice.client.email}</a>
+                      <a href={`mailto:${invoice.client.email}`} className="text-primary dark:text-secondary hover:underline truncate">{invoice.client.email}</a>
                     </p>
                     {invoice.client.phone && (
                       <p className="text-sm text-slate-600 dark:text-slate-400 flex items-center gap-1.5">
@@ -436,7 +440,7 @@ function PublicInvoiceViewInner() {
             <div className="grid grid-cols-3 gap-3 sm:gap-4 mb-8 p-5 bg-slate-50 dark:bg-slate-800/40 rounded-xl">
               <div className="flex items-start gap-3">
                 <div className="h-10 w-10 rounded-lg bg-white dark:bg-slate-900 flex items-center justify-center shadow-sm shrink-0">
-                  <Calendar className="h-4 w-4 text-blue-600" />
+                  <Calendar className="h-4 w-4 text-primary" />
                 </div>
                 <div className="min-w-0">
                   <p className="text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400 font-semibold">Issue Date</p>
@@ -445,7 +449,7 @@ function PublicInvoiceViewInner() {
               </div>
               <div className="flex items-start gap-3">
                 <div className={`h-10 w-10 rounded-lg ${isOverdue ? "bg-red-100 dark:bg-red-900/50" : "bg-white dark:bg-slate-900"} flex items-center justify-center shadow-sm shrink-0`}>
-                  <Calendar className={`h-4 w-4 ${isOverdue ? "text-red-600" : "text-blue-600"}`} />
+                  <Calendar className={`h-4 w-4 ${isOverdue ? "text-red-600" : "text-primary"}`} />
                 </div>
                 <div className="min-w-0">
                   <p className="text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400 font-semibold">Due Date</p>
@@ -456,7 +460,7 @@ function PublicInvoiceViewInner() {
               </div>
               <div className="flex items-start gap-3">
                 <div className="h-10 w-10 rounded-lg bg-white dark:bg-slate-900 flex items-center justify-center shadow-sm shrink-0">
-                  <span className="text-sm font-bold text-blue-600">{Math.round(taxRateNum)}%</span>
+                  <span className="text-sm font-bold text-primary">{Math.round(taxRateNum)}%</span>
                 </div>
                 <div className="min-w-0">
                   <p className="text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400 font-semibold">{taxLabel}</p>
@@ -482,7 +486,7 @@ function PublicInvoiceViewInner() {
                     <TableRow key={item.id} className="border-slate-100 dark:border-slate-800">
                       <TableCell className="text-slate-400 dark:text-slate-500 pl-5 font-mono">{i + 1}</TableCell>
                       <TableCell className="font-medium text-slate-900 dark:text-white py-4">{item.description}</TableCell>
-                      <TableCell className="text-right tabular-nums text-slate-600 dark:text-slate-400">{item.quantity}</TableCell>
+                      <TableCell className="text-right tabular-nums text-slate-600 dark:text-slate-400">{item.quantity.toString()}</TableCell>
                       <TableCell className="text-right tabular-nums text-slate-600 dark:text-slate-400">{formatMoney(Number(item.price), currency)}</TableCell>
                       <TableCell className="text-right font-semibold tabular-nums pr-5 text-slate-900 dark:text-white">{formatMoney(Number(item.total), currency)}</TableCell>
                     </TableRow>
@@ -516,7 +520,7 @@ function PublicInvoiceViewInner() {
                       ? "from-emerald-600 to-green-600 dark:from-emerald-400 dark:to-green-400"
                       : isOverdue
                       ? "from-red-600 to-rose-600 dark:from-red-400 dark:to-rose-400"
-                      : "from-blue-600 to-indigo-600 dark:from-blue-400 dark:to-indigo-400"
+                      : "from-primary to-[#1e4d3f] dark:from-secondary dark:to-primary"
                   } bg-clip-text text-transparent tabular-nums`}>
                     {formatMoney(totalNum, currency)}
                   </span>
@@ -591,7 +595,7 @@ function PublicInvoiceViewInner() {
 
         {/* Admin link */}
         <div className="text-center text-xs text-slate-400 dark:text-slate-600 no-print pt-2">
-          <Link href="/login" className="hover:text-blue-600 dark:hover:text-blue-400 hover:underline transition-colors">Admin login</Link>
+          <Link href="/login" className="hover:text-primary dark:hover:text-secondary hover:underline transition-colors">Admin login</Link>
           <span className="mx-2">·</span>
           <span>Secured by SmartBill</span>
         </div>

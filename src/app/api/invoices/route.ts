@@ -3,7 +3,8 @@ import { ZodError } from "zod";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { invoiceSchema } from "@/lib/validations";
-import { calculateInvoiceTotals, generateInvoiceNumber } from "@/lib/utils";
+import { calculateInvoiceTotals } from "@/lib/utils";
+import { allocateNextInvoiceNumber } from "@/lib/invoice-sequencer";
 import {
   getPrismaErrorCode,
   validationErrorResponse,
@@ -183,7 +184,32 @@ export async function POST(request: Request) {
       quantity: item.quantity,
       price: item.price,
       total: Math.round((item.quantity * item.price + Number.EPSILON) * 100) / 100,
+      fruitId: item.fruitId ?? null,
+      fruitName: item.fruitName ?? null,
+      fruitVariety: item.fruitVariety ?? null,
+      unitId: item.unitId ?? null,
+      unitName: item.unitName ?? null,
+      unitPriceSnapshot: item.unitPriceSnapshot != null ? item.unitPriceSnapshot : item.price,
     }));
+
+    // Invariant (Req 10): Draft invoices do not count as customer debt (balanceAmount = 0).
+    // Paid invoices created directly reflect full payment (paidAmount = total, balanceAmount = 0).
+    // Pending invoices count as full debt until allocated (paidAmount = 0, balanceAmount = total).
+    let paidAmount = 0;
+    let balanceAmount = 0;
+    let paidAtDate: Date | null = null;
+    if (validated.status === "PENDING") {
+      paidAmount = 0;
+      balanceAmount = total;
+    } else if (validated.status === "PAID") {
+      paidAmount = total;
+      balanceAmount = 0;
+      paidAtDate = new Date();
+    } else {
+      // DRAFT or VOID
+      paidAmount = 0;
+      balanceAmount = 0;
+    }
 
     // Load user settings for invoice number prefix/separator/pad and default tax label
     // (upsert ensures a row exists).
@@ -197,43 +223,39 @@ export async function POST(request: Request) {
     // user's saved tax label default.
     const taxLabel = (validated.taxLabel && validated.taxLabel.trim()) || settings.taxLabel || "GST";
 
-    // Generate next invoice number scoped to this user, today (per-day sequence
-    // so numbers look natural: PREFIX-YYYYMMDD-0001, -0002, ...).
-    const now = new Date();
-    const startOfDay = new Date(now);
-    startOfDay.setHours(0, 0, 0, 0);
-    const endOfDay = new Date(now);
-    endOfDay.setHours(23, 59, 59, 999);
-    const todayCount = await prisma.invoice.count({
-      where: { userId: user.id, createdAt: { gte: startOfDay, lte: endOfDay } },
-    });
-    const invoiceNumber = generateInvoiceNumber(todayCount, {
-      prefix: settings.invoicePrefix,
-      separator: settings.invoiceSeparator || "-",
-      pad: Number(settings.invoicePad) || 4,
-    });
+    // Concurrency-safe invoice number allocation using DailySequence inside an atomic transaction
+    const invoice = await prisma.$transaction(async (tx) => {
+      const invoiceNumber = await allocateNextInvoiceNumber(tx, user.id, {
+        prefix: settings.invoicePrefix,
+        separator: settings.invoiceSeparator || "-",
+        pad: Number(settings.invoicePad) || 4,
+      });
 
-    const invoice = await prisma.invoice.create({
-      data: {
-        userId: user.id,
-        invoiceNumber,
-        clientId: validated.clientId,
-        status: validated.status,
-        issueDate: new Date(validated.issueDate),
-        dueDate: new Date(validated.dueDate),
-        subtotal,
-        discountType: validated.discountType ?? null,
-        discountValue: validated.discountType && validated.discountValue != null
-          ? validated.discountValue
-          : null,
-        discountAmount,
-        taxRate: validated.taxRate,
-        taxLabel,
-        totalAmount: total,
-        notes: validated.notes ?? null,
-        items: { create: itemsData },
-      },
-      include: { client: true, items: true },
+      return tx.invoice.create({
+        data: {
+          userId: user.id,
+          invoiceNumber,
+          clientId: validated.clientId,
+          status: validated.status,
+          issueDate: new Date(validated.issueDate),
+          dueDate: new Date(validated.dueDate),
+          subtotal,
+          discountType: validated.discountType ?? null,
+          discountValue: validated.discountType && validated.discountValue != null
+            ? validated.discountValue
+            : null,
+          discountAmount,
+          taxRate: validated.taxRate,
+          taxLabel,
+          totalAmount: total,
+          paidAmount,
+          balanceAmount,
+          paidAt: paidAtDate,
+          notes: validated.notes ?? null,
+          items: { create: itemsData },
+        },
+        include: { client: true, items: true },
+      });
     });
 
     logActivity({

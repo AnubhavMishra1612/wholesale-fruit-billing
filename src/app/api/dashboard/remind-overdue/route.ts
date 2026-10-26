@@ -157,7 +157,7 @@ export async function POST(request: Request) {
         currency,
         items: invoice.items.map((i) => ({
           description: i.description,
-          quantity: i.quantity,
+          quantity: Number(i.quantity),
           price: Number(i.price),
           total: Number(i.total),
         })),

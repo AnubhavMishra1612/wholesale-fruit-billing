@@ -5,6 +5,7 @@
  */
 import { formatMoney } from "@/lib/format-money";
 import { formatDate } from "@/lib/utils";
+import { DEFAULT_BRAND_COLOR } from "@/lib/branding";
 
 export interface ReceiptEmailParams {
   companyName: string;
@@ -42,7 +43,7 @@ export function renderPaymentReceipt(p: ReceiptEmailParams): RenderedEmail {
   // Receipt uses a green success banner (classic "paid" affordance) but
   // respects the user's brand color as a subtle fallback accent in the
   // links / view button if provided.
-  const brand = p.brandColor && /^#([0-9a-fA-F]{3}){1,2}$/.test(p.brandColor) ? p.brandColor : "#2563eb";
+  const brand = p.brandColor && /^#([0-9a-fA-F]{3}){1,2}$/.test(p.brandColor) ? p.brandColor : DEFAULT_BRAND_COLOR;
   const logoHtml = p.logoUrl
     ? `<img src="${escapeHtml(p.logoUrl)}" alt="${escapeHtml(p.companyName)}" width="120" height="auto" style="display:block;max-height:48px;width:auto;max-width:160px;object-fit:contain;margin-bottom:10px;filter:brightness(0) invert(1);">`
     : "";

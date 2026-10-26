@@ -354,7 +354,7 @@ test.describe("Ledger Admin — /admin/ledger", () => {
         const paidRows = page
           .getByRole("row")
           .filter({ hasText: /payment received/i });
-        await expect(paidRows).toHaveCountGreaterThan(priorPaidRows);
+        expect(await paidRows.count()).toBeGreaterThan(priorPaidRows);
       }).toPass({ timeout: 15_000 });
 
       // HealthBanner must NOT read quarantined. Accept both the seed

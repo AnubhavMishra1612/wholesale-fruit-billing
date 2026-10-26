@@ -129,12 +129,12 @@ export default function ClientsPage() {
           {filteredClients.map((client) => (
             <div key={client.id} className="group relative">
               <Link href={`/clients/${client.id}`} className="block">
-                <Card className="h-full hover:border-blue-200 dark:hover:border-blue-800 hover:shadow-xl transition-all duration-300 cursor-pointer relative overflow-hidden">
-                  <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-bl from-blue-100/50 to-transparent dark:from-blue-900/20 rounded-bl-full opacity-0 group-hover:opacity-100 transition-opacity" />
+                <Card className="h-full hover:border-primary/40 dark:hover:border-primary/40 hover:shadow-xl transition-all duration-300 cursor-pointer relative overflow-hidden">
+                  <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-bl from-secondary/50 to-transparent dark:from-primary/20 rounded-bl-full opacity-0 group-hover:opacity-100 transition-opacity" />
                   <CardHeader className="pb-3 relative">
                     <div className="flex items-start justify-between">
                       <div className="flex items-center gap-3">
-                        <div className="h-11 w-11 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white font-semibold shadow-md shadow-blue-500/20 text-base group-hover:scale-110 transition-transform">
+                        <div className="h-11 w-11 rounded-xl bg-primary text-secondary flex items-center justify-center font-semibold shadow-md shadow-primary/20 text-base group-hover:scale-110 transition-transform">
                           {client.name.charAt(0).toUpperCase()}
                         </div>
                         <CardTitle className="text-lg truncate text-slate-900 dark:text-white pr-2">
@@ -162,13 +162,13 @@ export default function ClientsPage() {
                     )}
                     <div className="flex items-center justify-between pt-3 mt-3 border-t border-slate-100 dark:border-slate-800">
                       <div className="flex items-center gap-2 text-slate-600 dark:text-slate-400 text-sm">
-                        <FileText className="h-4 w-4 text-blue-500" />
+                        <FileText className="h-4 w-4 text-primary" />
                         <span>
                           <span className="font-semibold text-slate-900 dark:text-white">{client._count.invoices}</span>{" "}
                           invoice{client._count.invoices !== 1 ? "s" : ""}
                         </span>
                       </div>
-                      <ChevronRight className="h-4 w-4 text-slate-400 group-hover:text-blue-600 group-hover:translate-x-1 transition-all" />
+                      <ChevronRight className="h-4 w-4 text-slate-400 group-hover:text-primary group-hover:translate-x-1 transition-all" />
                     </div>
                   </CardContent>
                 </Card>
@@ -177,7 +177,7 @@ export default function ClientsPage() {
                 <button
                   type="button"
                   onClick={(e) => { e.preventDefault(); e.stopPropagation(); copyPortalLink(client); }}
-                  className="h-8 w-8 rounded-lg bg-white/80 dark:bg-slate-800/80 backdrop-blur border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-500 hover:text-indigo-600 dark:hover:text-indigo-400 hover:border-indigo-300 dark:hover:border-indigo-700"
+                  className="h-8 w-8 rounded-lg bg-white/80 dark:bg-slate-800/80 backdrop-blur border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-500 hover:text-primary dark:hover:text-secondary hover:border-primary"
                   aria-label={`Copy portal link for ${client.name}`}
                   title="Copy portal link"
                 >
@@ -186,7 +186,7 @@ export default function ClientsPage() {
                 <button
                   type="button"
                   onClick={(e) => { e.preventDefault(); e.stopPropagation(); setEditingClient(client); }}
-                  className="h-8 w-8 rounded-lg bg-white/80 dark:bg-slate-800/80 backdrop-blur border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-500 hover:text-blue-600 dark:hover:text-blue-400 hover:border-blue-300 dark:hover:border-blue-700"
+                  className="h-8 w-8 rounded-lg bg-white/80 dark:bg-slate-800/80 backdrop-blur border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-500 hover:text-primary dark:hover:text-secondary hover:border-primary"
                   aria-label={`Edit ${client.name}`}
                   title="Edit client"
                 >
@@ -199,8 +199,8 @@ export default function ClientsPage() {
           {!search.trim() && (
             <NewClientDialog
               trigger={
-                <Card className="h-full border-dashed border-slate-300 dark:border-slate-700 hover:border-blue-400 dark:hover:border-blue-600 hover:bg-blue-50/50 dark:hover:bg-blue-950/10 transition-all cursor-pointer flex items-center justify-center min-h-[180px] group">
-                  <CardContent className="flex flex-col items-center justify-center py-8 text-center text-slate-500 dark:text-slate-400 group-hover:text-blue-600 dark:group-hover:text-blue-400">
+                <Card className="h-full border-dashed border-slate-300 dark:border-slate-700 hover:border-primary hover:bg-secondary/20 dark:hover:bg-primary/10 transition-all cursor-pointer flex items-center justify-center min-h-[180px] group">
+                  <CardContent className="flex flex-col items-center justify-center py-8 text-center text-slate-500 dark:text-slate-400 group-hover:text-primary dark:group-hover:text-secondary">
                     <div className="h-11 w-11 rounded-full border-2 border-dashed border-current flex items-center justify-center mb-2 group-hover:scale-110 transition-transform">
                       <Plus className="h-5 w-5" />
                     </div>

@@ -314,7 +314,7 @@ export function ExpenseTracker({ currency }: ExpenseTrackerProps) {
                     <button
                       type="button"
                       onClick={() => openEdit(ex)}
-                      className="h-7 w-7 rounded-md text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center justify-center"
+                      className="h-7 w-7 rounded-md text-slate-400 hover:text-primary dark:hover:text-secondary hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center justify-center"
                       title="Edit"
                     >
                       <Pencil className="h-3.5 w-3.5" />

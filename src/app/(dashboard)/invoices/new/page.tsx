@@ -63,7 +63,7 @@ function NewInvoicePageInner() {
       {loading ? (
         <Card className="border-slate-200/60 dark:border-slate-800/60">
           <CardContent className="py-16 text-center">
-            <Loader2 className="h-8 w-8 animate-spin text-blue-600 mx-auto" />
+            <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto" />
             <p className="text-sm text-slate-500 mt-3">Loading...</p>
           </CardContent>
         </Card>
@@ -108,7 +108,7 @@ export default function NewInvoicePage() {
     <Suspense
       fallback={
         <div className="flex items-center justify-center py-20">
-          <Loader2 className="h-6 w-6 animate-spin text-blue-600" />
+          <Loader2 className="h-6 w-6 animate-spin text-primary" />
         </div>
       }
     >

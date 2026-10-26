@@ -10,7 +10,9 @@
     "db:seed": "npx prisma db seed",
     "db:reset": "prisma migrate reset --force && npm run db:seed",
     "postinstall": "prisma generate",
-    "test:e2e": "playwright test"
+    "test:unit": "node --test tests/unit/wholesale-fruit-billing.test.mjs",
+    "test:e2e": "playwright test",
+    "test": "node --test tests/unit/wholesale-fruit-billing.test.mjs"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

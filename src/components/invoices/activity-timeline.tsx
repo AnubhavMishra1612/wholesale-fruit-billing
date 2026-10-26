@@ -33,8 +33,8 @@ const TYPE_META: Record<InvoiceActivityType, { icon: typeof History; label: stri
   CREATED: {
     icon: FilePlus,
     label: "Created",
-    color: "text-blue-600 dark:text-blue-400",
-    dotColor: "bg-blue-500",
+    color: "text-primary dark:text-secondary",
+    dotColor: "bg-primary",
   },
   EDITED: {
     icon: Pencil,
@@ -45,8 +45,8 @@ const TYPE_META: Record<InvoiceActivityType, { icon: typeof History; label: stri
   SENT: {
     icon: Mail,
     label: "Sent",
-    color: "text-indigo-600 dark:text-indigo-400",
-    dotColor: "bg-indigo-500",
+    color: "text-primary dark:text-secondary",
+    dotColor: "bg-primary",
   },
   REMINDED: {
     icon: Bell,
@@ -117,8 +117,8 @@ const TYPE_META: Record<InvoiceActivityType, { icon: typeof History; label: stri
   EMAIL_OPENED: {
     icon: MailOpen,
     label: "Email opened",
-    color: "text-blue-600 dark:text-blue-400",
-    dotColor: "bg-blue-500",
+    color: "text-primary dark:text-secondary",
+    dotColor: "bg-primary",
   },
 };
 

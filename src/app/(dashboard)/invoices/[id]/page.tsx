@@ -35,7 +35,7 @@ import {
 } from "lucide-react";
 import { formatDate } from "@/lib/utils";
 import { formatMoney } from "@/lib/format-money";
-import type { InvoiceWithRelations } from "@/types";
+import type { InvoiceWithRelations, InvoiceStatus } from "@/types";
 import { SendInvoiceButton } from "@/components/invoices/send-invoice-button";
 import { DownloadPdfButton } from "@/components/invoices/download-pdf-button";
 import { RemindInvoiceButton } from "@/components/invoices/remind-invoice-button";
@@ -60,12 +60,16 @@ interface CompanySettings {
   defaultTaxRate: number | string;
 }
 
-function StatusBadge({ status }: { status: "DRAFT" | "PENDING" | "PAID" | "VOID" }) {
-  const config = {
-    DRAFT: { variant: "draft" as const, label: "Draft", icon: Clock },
-    PENDING: { variant: "warning" as const, label: "Pending", icon: Clock },
-    PAID: { variant: "success" as const, label: "Paid", icon: CheckCircle2 },
-    VOID: { variant: "neutral" as const, label: "Void", icon: Ban },
+function StatusBadge({ status }: { status: InvoiceStatus }) {
+  const config: Record<
+    InvoiceStatus,
+    { variant: "draft" | "warning" | "success" | "neutral"; label: string; icon: typeof Clock }
+  > = {
+    DRAFT: { variant: "draft", label: "Draft", icon: Clock },
+    PENDING: { variant: "warning", label: "Pending", icon: Clock },
+    PARTIALLY_PAID: { variant: "warning", label: "Partially Paid", icon: Clock },
+    PAID: { variant: "success", label: "Paid", icon: CheckCircle2 },
+    VOID: { variant: "neutral", label: "Void", icon: Ban },
   };
   const { variant, label, icon: Icon } = config[status];
   return (
@@ -167,7 +171,7 @@ export default function InvoiceDetailPage() {
     return (
       <div className="flex items-center justify-center py-24">
         <div className="text-center">
-          <Loader2 className="h-8 w-8 animate-spin text-blue-600 mx-auto" />
+          <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto" />
           <p className="text-sm text-slate-500 mt-3">Loading invoice...</p>
         </div>
       </div>
@@ -349,7 +353,7 @@ export default function InvoiceDetailPage() {
           isPaid ? "bg-gradient-to-r from-emerald-500 to-green-500" :
           isOverdue ? "bg-gradient-to-r from-red-500 to-rose-500" :
           isDraft ? "bg-gradient-to-r from-slate-400 to-slate-500" :
-          "bg-gradient-to-r from-blue-500 to-indigo-500"
+          "bg-gradient-to-r from-primary to-emerald-700"
         }`} />
 
         <CardContent className="p-8 sm:p-12">
@@ -357,8 +361,8 @@ export default function InvoiceDetailPage() {
           <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-6 mb-10">
             <div>
               <div className="flex items-center gap-3">
-                <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center shadow-lg shadow-blue-500/25">
-                  <FileText className="h-6 w-6 text-white" />
+                <div className="h-12 w-12 rounded-xl bg-primary text-secondary flex items-center justify-center shadow-md shadow-primary/20">
+                  <FileText className="h-6 w-6 text-secondary" />
                 </div>
                 <div>
                   <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100">INVOICE</h2>
@@ -370,7 +374,7 @@ export default function InvoiceDetailPage() {
               <StatusBadge status={invoice.status} />
               <div className="text-right">
                 <p className="text-xs text-slate-500 uppercase tracking-wider font-medium">Amount Due</p>
-                <p className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 dark:from-blue-400 dark:to-indigo-400 bg-clip-text text-transparent tabular-nums">
+                <p className="text-3xl font-bold text-primary dark:text-secondary tabular-nums">
                   {formatMoney(totalNum, currency)}
                 </p>
               </div>
@@ -387,7 +391,7 @@ export default function InvoiceDetailPage() {
                 <p className="font-bold text-lg text-slate-900 dark:text-white">{companyName}</p>
                 <p className="text-sm text-slate-600 dark:text-slate-400 flex items-center gap-1.5">
                   <Mail className="h-3.5 w-3.5 text-slate-400" />
-                  <a href={`mailto:${companyEmail}`} className="text-blue-600 dark:text-blue-400 hover:underline">{companyEmail}</a>
+                  <a href={`mailto:${companyEmail}`} className="text-primary dark:text-secondary hover:underline">{companyEmail}</a>
                 </p>
                 {companyPhone && (
                   <p className="text-sm text-slate-600 dark:text-slate-400 flex items-center gap-1.5">
@@ -402,15 +406,15 @@ export default function InvoiceDetailPage() {
               </div>
             </div>
 
-            <div className="bg-blue-50/50 dark:bg-blue-950/20 rounded-xl p-5 border border-blue-100 dark:border-blue-900/30">
-              <p className="text-xs uppercase tracking-wider text-blue-700 dark:text-blue-400 mb-3 font-bold flex items-center gap-1.5">
+            <div className="bg-secondary/30 dark:bg-primary/20 rounded-xl p-5 border border-border">
+              <p className="text-xs uppercase tracking-wider text-primary dark:text-secondary mb-3 font-bold flex items-center gap-1.5">
                 <Receipt className="h-3 w-3" /> Bill To
               </p>
               <div className="space-y-1.5">
                 <p className="font-bold text-lg text-slate-900 dark:text-white">{invoice.client.name}</p>
                 <p className="text-sm text-slate-600 dark:text-slate-400 flex items-center gap-1.5">
                   <Mail className="h-3.5 w-3.5 text-slate-400" />
-                  <a href={`mailto:${invoice.client.email}`} className="text-blue-600 dark:text-blue-400 hover:underline">{invoice.client.email}</a>
+                  <a href={`mailto:${invoice.client.email}`} className="text-primary dark:text-secondary hover:underline">{invoice.client.email}</a>
                 </p>
                 {"phone" in invoice.client && invoice.client.phone && (
                   <p className="text-sm text-slate-600 dark:text-slate-400 flex items-center gap-1.5">
@@ -430,7 +434,7 @@ export default function InvoiceDetailPage() {
           <div className="grid grid-cols-3 gap-4 mb-8 p-5 bg-slate-50 dark:bg-slate-800/40 rounded-xl">
             <div className="flex items-start gap-3">
               <div className="h-10 w-10 rounded-lg bg-white dark:bg-slate-900 flex items-center justify-center shadow-sm shrink-0">
-                <Calendar className="h-4 w-4 text-blue-600" />
+                <Calendar className="h-4 w-4 text-primary" />
               </div>
               <div>
                 <p className="text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400 font-semibold">Issue Date</p>
@@ -439,7 +443,7 @@ export default function InvoiceDetailPage() {
             </div>
             <div className="flex items-start gap-3">
               <div className={`h-10 w-10 rounded-lg ${isOverdue ? "bg-red-100 dark:bg-red-900/50" : "bg-white dark:bg-slate-900"} flex items-center justify-center shadow-sm shrink-0`}>
-                <Calendar className={`h-4 w-4 ${isOverdue ? "text-red-600" : "text-blue-600"}`} />
+                <Calendar className={`h-4 w-4 ${isOverdue ? "text-red-600" : "text-primary"}`} />
               </div>
               <div>
                 <p className="text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400 font-semibold">Due Date</p>
@@ -450,7 +454,7 @@ export default function InvoiceDetailPage() {
             </div>
             <div className="flex items-start gap-3">
               <div className="h-10 w-10 rounded-lg bg-white dark:bg-slate-900 flex items-center justify-center shadow-sm shrink-0">
-                <span className="text-sm font-bold text-blue-600">{Math.round(taxRateNum)}%</span>
+                <span className="text-sm font-bold text-primary">{Math.round(taxRateNum)}%</span>
               </div>
               <div>
                 <p className="text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400 font-semibold">Tax Rate</p>
@@ -472,15 +476,36 @@ export default function InvoiceDetailPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {invoice.items.map((item, i) => (
-                  <TableRow key={item.id} className="border-slate-100 dark:border-slate-800">
-                    <TableCell className="text-slate-400 dark:text-slate-500 pl-5 font-mono">{i + 1}</TableCell>
-                    <TableCell className="font-medium text-slate-900 dark:text-white py-4">{item.description}</TableCell>
-                    <TableCell className="text-right tabular-nums text-slate-600 dark:text-slate-400">{item.quantity}</TableCell>
-                    <TableCell className="text-right tabular-nums text-slate-600 dark:text-slate-400">{formatMoney(Number(item.price), currency)}</TableCell>
-                    <TableCell className="text-right font-semibold tabular-nums pr-5 text-slate-900 dark:text-white">{formatMoney(Number(item.total), currency)}</TableCell>
-                  </TableRow>
-                ))}
+                {invoice.items.map((item, i) => {
+                  const numQty = Number(item.quantity);
+                  const formattedQty = Number.isInteger(numQty)
+                    ? String(numQty)
+                    : numQty.toFixed(3).replace(/\.?0+$/, "");
+                  return (
+                    <TableRow key={item.id} className="border-slate-100 dark:border-slate-800">
+                      <TableCell className="text-slate-400 dark:text-slate-500 pl-5 font-mono">{i + 1}</TableCell>
+                      <TableCell className="font-medium text-slate-900 dark:text-white py-4">
+                        <div>
+                          {item.description}
+                          {item.fruitVariety && (
+                            <span className="text-xs text-slate-500 dark:text-slate-400 ml-1.5 font-normal">
+                              ({item.fruitVariety})
+                            </span>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums text-slate-600 dark:text-slate-400 font-mono">
+                        {formattedQty} {item.unitName || ""}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums text-slate-600 dark:text-slate-400 font-mono">
+                        {formatMoney(Number(item.price), currency)}{item.unitName ? ` / ${item.unitName}` : ""}
+                      </TableCell>
+                      <TableCell className="text-right font-semibold tabular-nums pr-5 text-slate-900 dark:text-white font-mono">
+                        {formatMoney(Number(item.total), currency)}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           </div>
@@ -507,7 +532,7 @@ export default function InvoiceDetailPage() {
               <Separator className="bg-slate-300 dark:bg-slate-700" />
               <div className="flex justify-between py-2 items-center">
                 <span className="text-base font-bold text-slate-900 dark:text-white">Total Due</span>
-                <span className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 dark:from-blue-400 dark:to-indigo-400 bg-clip-text text-transparent tabular-nums">
+                <span className="text-2xl font-bold text-primary dark:text-secondary tabular-nums">
                   {formatMoney(totalNum, currency)}
                 </span>
               </div>

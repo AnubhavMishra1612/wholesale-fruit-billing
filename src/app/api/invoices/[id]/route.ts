@@ -25,8 +25,8 @@ interface RouteParams {
 
 /** Lightweight status-only update (used by Mark-as-Paid, Void, etc.). */
 const statusOnlySchema = z.object({
-  status: z.enum(["DRAFT", "PENDING", "PAID", "VOID"], {
-    message: "Status must be one of: DRAFT, PENDING, PAID, VOID",
+  status: z.enum(["DRAFT", "PENDING", "PAID", "VOID", "PARTIALLY_PAID"], {
+    message: "Status must be one of: DRAFT, PENDING, PAID, VOID, PARTIALLY_PAID",
   }),
 });
 
@@ -160,17 +160,62 @@ export async function PATCH(request: Request, { params }: RouteParams) {
         });
         return NextResponse.json(reloaded, { status: 200 });
       }
+      // Reject unsafe transition to DRAFT or VOID if active allocations exist
+      if ((validated.status === "DRAFT" || validated.status === "VOID") && existing.status !== validated.status) {
+        const activeAllocationsCount = await prisma.paymentAllocation.count({
+          where: { invoiceId: id, status: "ACTIVE" },
+        });
+        if (activeAllocationsCount > 0) {
+          return jsonError(
+            `Cannot transition invoice to ${validated.status}: invoice has active payment allocations. Reverse existing payment allocations first.`,
+            409
+          );
+        }
+      }
+
+      // Query active allocations to preserve actual allocation balances
+      const activeAllocations = await prisma.paymentAllocation.aggregate({
+        where: { invoiceId: id, status: "ACTIVE" },
+        _sum: { amount: true },
+      });
+      const allocatedSum = Number(activeAllocations._sum.amount) || 0;
+
       // Other status transitions (e.g. PAID → PENDING, PENDING → DRAFT, any → VOID).
       const now = new Date();
       const updateData: {
-        status: "DRAFT" | "PENDING" | "PAID" | "VOID";
+        status: "DRAFT" | "PENDING" | "PAID" | "VOID" | "PARTIALLY_PAID";
         paidAt?: Date | null;
+        paidAmount?: number;
+        balanceAmount?: number;
       } = { status: validated.status };
-      if (validated.status !== "PAID" && existing.status === "PAID") {
-        updateData.paidAt = null;
+
+      if (validated.status === "DRAFT") {
+        updateData.paidAmount = 0;
+        updateData.balanceAmount = 0;
+        if (existing.status === "PAID") updateData.paidAt = null;
+      } else if (validated.status === "PENDING") {
+        if (existing.status === "PAID") {
+          updateData.paidAt = null;
+          updateData.paidAmount = allocatedSum;
+          updateData.balanceAmount = Math.max(0, Number(existing.totalAmount) - allocatedSum);
+        } else if (existing.status === "DRAFT") {
+          updateData.paidAmount = allocatedSum;
+          updateData.balanceAmount = Math.max(0, Number(existing.totalAmount) - allocatedSum);
+        }
       } else if (validated.status === "PAID") {
         updateData.paidAt = now;
+        updateData.paidAmount = Number(existing.totalAmount);
+        updateData.balanceAmount = 0;
+      } else if (validated.status === "PARTIALLY_PAID") {
+        updateData.paidAt = null;
+        updateData.paidAmount = allocatedSum;
+        updateData.balanceAmount = Math.max(0, Number(existing.totalAmount) - allocatedSum);
+      } else if (validated.status === "VOID") {
+        updateData.paidAmount = 0;
+        updateData.balanceAmount = 0;
+        if (existing.status === "PAID") updateData.paidAt = null;
       }
+
       const invoice = await prisma.invoice.update({
         where: { id },
         data: updateData,
@@ -235,6 +280,12 @@ export async function PATCH(request: Request, { params }: RouteParams) {
         quantity: it.quantity,
         price: it.price,
         total: lineTotal,
+        fruitId: it.fruitId ?? null,
+        fruitName: it.fruitName ?? null,
+        fruitVariety: it.fruitVariety ?? null,
+        unitId: it.unitId ?? null,
+        unitName: it.unitName ?? null,
+        unitPriceSnapshot: it.unitPriceSnapshot != null ? it.unitPriceSnapshot : it.price,
       };
     });
 
@@ -250,6 +301,51 @@ export async function PATCH(request: Request, { params }: RouteParams) {
       paidAtValue = now;
     } else if (validated.status !== "PAID" && existing.status === "PAID") {
       paidAtValue = null;
+    }
+
+    // Invariant (Accounting Safety Guard):
+    // Reject unsafe transition to DRAFT or VOID if active allocations exist
+    if ((validated.status === "DRAFT" || validated.status === "VOID") && existing.status !== validated.status) {
+      const activeAllocationsCount = await prisma.paymentAllocation.count({
+        where: { invoiceId: id, status: "ACTIVE" },
+      });
+      if (activeAllocationsCount > 0) {
+        return jsonError(
+          `Cannot transition invoice to ${validated.status}: invoice has active payment allocations. Reverse existing payment allocations first.`,
+          409
+        );
+      }
+    }
+
+    // Query active allocations to preserve actual allocation balances
+    const activeAllocations = await prisma.paymentAllocation.aggregate({
+      where: { invoiceId: id, status: "ACTIVE" },
+      _sum: { amount: true },
+    });
+    const allocatedSum = Number(activeAllocations._sum.amount) || 0;
+
+    if ((validated.status === "PENDING" || validated.status === "PARTIALLY_PAID") && allocatedSum > total) {
+      return jsonError(
+        `Cannot reduce invoice total to ${total}: active payment allocations totaling ${allocatedSum} exist. Adjust allocations first.`,
+        409
+      );
+    }
+
+    // Invariant (Req 10): Draft invoices do not count as customer debt (balanceAmount = 0).
+    // Paid invoices created or updated directly reflect full payment (paidAmount = total, balanceAmount = 0).
+    // Pending invoices count as debt: balanceAmount = Math.max(0, total - paidAmount).
+    let paidAmount = 0;
+    let balanceAmount = 0;
+    if (validated.status === "PENDING" || validated.status === "PARTIALLY_PAID") {
+      paidAmount = allocatedSum > 0 ? allocatedSum : (Number(existing.paidAmount) || 0);
+      balanceAmount = Math.max(0, total - paidAmount);
+    } else if (validated.status === "PAID") {
+      paidAmount = total;
+      balanceAmount = 0;
+    } else {
+      // DRAFT or VOID
+      paidAmount = 0;
+      balanceAmount = 0;
     }
 
     const invoice = await prisma.$transaction(async (tx) => {
@@ -269,6 +365,12 @@ export async function PATCH(request: Request, { params }: RouteParams) {
               quantity: it.quantity,
               price: it.price,
               total: it.total,
+              fruitId: it.fruitId,
+              fruitName: it.fruitName,
+              fruitVariety: it.fruitVariety,
+              unitId: it.unitId,
+              unitName: it.unitName,
+              unitPriceSnapshot: it.unitPriceSnapshot,
             },
           });
         } else {
@@ -279,6 +381,12 @@ export async function PATCH(request: Request, { params }: RouteParams) {
               quantity: it.quantity,
               price: it.price,
               total: it.total,
+              fruitId: it.fruitId,
+              fruitName: it.fruitName,
+              fruitVariety: it.fruitVariety,
+              unitId: it.unitId,
+              unitName: it.unitName,
+              unitPriceSnapshot: it.unitPriceSnapshot,
             },
           });
         }
@@ -300,6 +408,8 @@ export async function PATCH(request: Request, { params }: RouteParams) {
           taxRate: validated.taxRate,
           taxLabel: (validated.taxLabel && validated.taxLabel.trim()) || existing.taxLabel || "GST",
           totalAmount: total,
+          paidAmount,
+          balanceAmount,
           notes: validated.notes ?? null,
           ...(paidAtValue === undefined ? {} : { paidAt: paidAtValue }),
         },

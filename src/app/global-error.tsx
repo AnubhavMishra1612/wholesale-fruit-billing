@@ -57,7 +57,7 @@ export default function GlobalError({
             )}
 
             <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-3">
-              <Button onClick={() => reset()} className="w-full sm:w-auto shadow-lg shadow-blue-500/25">
+              <Button onClick={() => reset()} className="w-full sm:w-auto bg-primary hover:bg-[#1e4d3f] text-primary-foreground shadow-lg shadow-primary/25">
                 <RotateCcw className="h-4 w-4 mr-2" />
                 Try Again
               </Button>

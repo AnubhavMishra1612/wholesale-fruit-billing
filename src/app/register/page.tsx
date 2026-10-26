@@ -89,16 +89,16 @@ function RegisterForm() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4 bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 relative overflow-hidden">
-      <div className="absolute top-0 -left-40 w-96 h-96 bg-blue-400/20 dark:bg-blue-500/10 rounded-full blur-3xl" />
-      <div className="absolute bottom-0 -right-40 w-96 h-96 bg-indigo-400/20 dark:bg-indigo-500/10 rounded-full blur-3xl" />
+    <div className="min-h-screen flex items-center justify-center px-4 bg-gradient-to-br from-background via-secondary/20 to-background relative overflow-hidden">
+      <div className="absolute top-0 -left-40 w-96 h-96 bg-primary/10 rounded-full blur-3xl" />
+      <div className="absolute bottom-0 -right-40 w-96 h-96 bg-secondary/30 rounded-full blur-3xl" />
 
       <div className="w-full max-w-md relative z-10">
         <Link href="/" className="flex items-center justify-center gap-3 mb-8">
-          <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center shadow-lg shadow-blue-500/30">
-            <Receipt className="h-6 w-6 text-white" />
+          <div className="h-12 w-12 rounded-xl bg-primary flex items-center justify-center shadow-lg shadow-primary/30">
+            <Receipt className="h-6 w-6 text-primary-foreground" />
           </div>
-          <span className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 dark:from-blue-400 dark:to-indigo-400 bg-clip-text text-transparent">
+          <span className="text-3xl font-bold text-primary dark:text-secondary">
             SmartBill
           </span>
         </Link>
@@ -177,7 +177,7 @@ function RegisterForm() {
                 )}
               </div>
 
-              <div className="rounded-lg bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/40 dark:to-indigo-950/40 border border-blue-100 dark:border-blue-900/50 px-4 py-3 text-xs text-blue-700 dark:text-blue-300 flex items-start gap-2">
+              <div className="rounded-lg bg-secondary/30 dark:bg-primary/20 border border-border px-4 py-3 text-xs text-primary dark:text-secondary flex items-start gap-2">
                 <Sparkles className="h-3.5 w-3.5 mt-0.5 flex-shrink-0" />
                 <span>
                   Every account gets its own isolated data — your clients, invoices, and branding stay private.
@@ -188,7 +188,7 @@ function RegisterForm() {
             <CardFooter className="flex flex-col gap-3 pt-2">
               <Button
                 type="submit"
-                className="w-full h-11 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-lg shadow-blue-500/25 text-base font-medium"
+                className="w-full h-11 bg-primary hover:bg-[#1e4d3f] text-primary-foreground shadow-lg shadow-primary/25 text-base font-medium"
                 size="lg"
                 disabled={loading}
               >
@@ -206,7 +206,7 @@ function RegisterForm() {
               </Button>
               <p className="text-xs text-center text-slate-500 dark:text-slate-400">
                 Already have an account?{" "}
-                <Link href="/login" className="text-blue-600 dark:text-blue-400 hover:underline font-medium">
+                <Link href="/login" className="text-primary dark:text-secondary hover:underline font-medium">
                   Sign in
                 </Link>
               </p>
@@ -226,7 +226,7 @@ export default function RegisterPage() {
   return (
     <Suspense fallback={
       <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-950">
-        <Loader2 className="h-6 w-6 animate-spin text-blue-600" />
+        <Loader2 className="h-6 w-6 animate-spin text-primary" />
       </div>
     }>
       <RegisterForm />

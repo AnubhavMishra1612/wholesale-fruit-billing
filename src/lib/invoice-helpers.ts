@@ -43,6 +43,8 @@ export async function markInvoicePaid(
   const data: Record<string, unknown> = {
     status: "PAID",
     paidAt: new Date(),
+    paidAmount: existing.totalAmount,
+    balanceAmount: 0,
   };
   if (opts.stripePaymentIntentId) data.stripePaymentIntentId = opts.stripePaymentIntentId;
   if (opts.stripeCheckoutSessionId) data.stripeCheckoutSessionId = opts.stripeCheckoutSessionId;

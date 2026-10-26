@@ -40,7 +40,7 @@ function CustomTooltip({
   return (
     <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 py-3 shadow-xl text-sm">
       <p className="font-semibold text-slate-900 dark:text-slate-100 mb-1">{label}</p>
-      <p className="text-blue-600 dark:text-blue-400 font-bold text-lg">
+      <p className="text-primary dark:text-secondary font-bold text-lg">
         {formatCurrency(payload[0].value)}
       </p>
     </div>
@@ -87,12 +87,12 @@ export function RevenueChart({ data, title = "Monthly Revenue" }: RevenueChartPr
               <BarChart data={data} margin={{ top: 8, right: 12, left: 0, bottom: 8 }}>
                 <defs>
                   <linearGradient id="barGradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#3b82f6" stopOpacity={0.9} />
-                    <stop offset="100%" stopColor="#6366f1" stopOpacity={0.6} />
+                    <stop offset="0%" stopColor="#173D32" stopOpacity={0.85} />
+                    <stop offset="100%" stopColor="#1e4d3f" stopOpacity={0.5} />
                   </linearGradient>
                   <linearGradient id="barGradientActive" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#2563eb" stopOpacity={1} />
-                    <stop offset="100%" stopColor="#4f46e5" stopOpacity={0.8} />
+                    <stop offset="0%" stopColor="#173D32" stopOpacity={1} />
+                    <stop offset="100%" stopColor="#1e4d3f" stopOpacity={0.8} />
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} strokeOpacity={0.5} />
@@ -111,7 +111,7 @@ export function RevenueChart({ data, title = "Monthly Revenue" }: RevenueChartPr
                 />
                 <Tooltip
                   content={<CustomTooltip />}
-                  cursor={{ fill: "rgba(59, 130, 246, 0.08)" }}
+                  cursor={{ fill: "rgba(23, 61, 50, 0.08)" }}
                 />
                 <Bar dataKey="revenue" radius={[6, 6, 0, 0]} maxBarSize={48}>
                   {data.map((_entry, index) => (

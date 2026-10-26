@@ -154,7 +154,7 @@ export default function SettingsPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
-        <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     );
   }
@@ -172,7 +172,7 @@ export default function SettingsPage() {
     <div className="max-w-2xl mx-auto space-y-6">
       <div>
         <div className="flex items-center gap-3 mb-2">
-          <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center shadow-lg shadow-blue-500/25">
+          <div className="h-12 w-12 rounded-xl bg-primary flex items-center justify-center shadow-lg shadow-primary/25">
             <Building2 className="h-6 w-6 text-white" />
           </div>
           <div>
@@ -220,7 +220,7 @@ export default function SettingsPage() {
       <Card className="border-slate-200/60 dark:border-slate-800/60">
         <CardHeader className="border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 rounded-t-xl">
           <div className="flex items-center gap-2">
-            <Palette className="h-4 w-4 text-blue-600" />
+            <Palette className="h-4 w-4 text-primary" />
             <CardTitle className="text-base">Branding</CardTitle>
           </div>
           <CardDescription>
@@ -261,7 +261,7 @@ export default function SettingsPage() {
         <Card className="border-slate-200/60 dark:border-slate-800/60">
           <CardHeader className="border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 rounded-t-xl">
             <div className="flex items-center gap-2">
-              <Receipt className="h-4 w-4 text-blue-600" />
+              <Receipt className="h-4 w-4 text-primary" />
               <CardTitle className="text-base">Business Profile</CardTitle>
             </div>
             <CardDescription>Update how your business appears to clients.</CardDescription>
@@ -302,18 +302,18 @@ export default function SettingsPage() {
                 id="companyAddress"
                 {...register("companyAddress")}
                 rows={3}
-                className="flex w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 px-4 py-3 text-sm ring-offset-white dark:ring-offset-slate-950 placeholder:text-slate-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:focus-visible:ring-blue-400 focus-visible:ring-offset-2 resize-none text-slate-900 dark:text-slate-100"
+                className="flex w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 px-4 py-3 text-sm ring-offset-white dark:ring-offset-slate-950 placeholder:text-slate-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 resize-none text-slate-900 dark:text-slate-100"
                 placeholder="Street address, city, state, ZIP, country"
               />
               {errors.companyAddress && <p className="text-xs text-red-600 dark:text-red-400">{errors.companyAddress.message}</p>}
             </div>
 
-            <div className="rounded-lg border border-blue-100 dark:border-blue-900/40 bg-blue-50/60 dark:bg-blue-950/20 p-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+            <div className="rounded-lg border border-border bg-secondary/30 dark:bg-primary/20 p-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
               <div>
-                <p className="text-xs font-semibold uppercase tracking-wider text-blue-700 dark:text-blue-300">Invoice Number Preview</p>
+                <p className="text-xs font-semibold uppercase tracking-wider text-primary dark:text-secondary">Invoice Number Preview</p>
                 <p className="text-sm text-slate-600 dark:text-slate-400 mt-0.5">The next invoice will be numbered:</p>
               </div>
-              <code className="font-mono text-sm sm:text-base font-semibold text-blue-700 dark:text-blue-300 bg-white dark:bg-slate-950/60 rounded px-3 py-1.5 border border-blue-200 dark:border-blue-900/40 whitespace-nowrap">
+              <code className="font-mono text-sm sm:text-base font-semibold text-primary dark:text-secondary bg-white dark:bg-slate-950/60 rounded px-3 py-1.5 border border-border whitespace-nowrap">
                 {previewNumber}
               </code>
             </div>
@@ -426,7 +426,7 @@ export default function SettingsPage() {
               <Button type="button" variant="outline" onClick={() => reset()} disabled={saving || !isDirty}>
                 Reset
               </Button>
-              <Button type="submit" disabled={saving} className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-lg shadow-blue-500/25 px-6">
+              <Button type="submit" disabled={saving} className="bg-primary hover:bg-[#1e4d3f] text-primary-foreground shadow-lg shadow-primary/25 px-6">
                 {saving ? (
                   <>
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Saving...

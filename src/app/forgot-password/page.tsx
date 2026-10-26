@@ -40,14 +40,14 @@ export default function ForgotPasswordPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 p-4 relative overflow-hidden">
-      <div className="absolute top-0 -left-40 w-96 h-96 bg-blue-400/20 dark:bg-blue-500/10 rounded-full blur-3xl pointer-events-none" />
-      <div className="absolute bottom-0 -right-40 w-96 h-96 bg-indigo-400/20 dark:bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-secondary/20 to-background p-4 relative overflow-hidden">
+      <div className="absolute top-0 -left-40 w-96 h-96 bg-primary/10 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute bottom-0 -right-40 w-96 h-96 bg-secondary/30 rounded-full blur-3xl pointer-events-none" />
 
       <Card className="w-full max-w-md relative z-10 shadow-xl border-slate-200/60 dark:border-slate-800/60 backdrop-blur-sm">
         <CardHeader className="text-center">
-          <div className="mx-auto h-14 w-14 rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center shadow-lg shadow-blue-500/25 mb-3">
-            <KeyRound className="h-7 w-7 text-white" />
+          <div className="mx-auto h-14 w-14 rounded-2xl bg-primary flex items-center justify-center shadow-lg shadow-primary/25 mb-3">
+            <KeyRound className="h-7 w-7 text-primary-foreground" />
           </div>
           <CardTitle className="text-2xl">Forgot password?</CardTitle>
           <CardDescription>
@@ -83,12 +83,12 @@ export default function ForgotPasswordPage() {
                   placeholder="you@example.com"
                 />
               </div>
-              <Button type="submit" className="w-full bg-gradient-to-r from-blue-600 to-indigo-600" disabled={loading}>
+              <Button type="submit" className="w-full bg-primary hover:bg-[#1e4d3f] text-primary-foreground shadow-lg shadow-primary/25" disabled={loading}>
                 {loading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Mail className="h-4 w-4 mr-2" />}
                 Send reset link
               </Button>
               <div className="text-center pt-2">
-                <Link href="/login" className="text-sm text-blue-600 hover:underline inline-flex items-center gap-1">
+                <Link href="/login" className="text-sm text-primary dark:text-secondary hover:underline inline-flex items-center gap-1">
                   <ArrowLeft className="h-3 w-3" /> Back to sign in
                 </Link>
               </div>

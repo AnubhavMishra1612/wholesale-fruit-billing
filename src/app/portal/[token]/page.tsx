@@ -185,9 +185,9 @@ function PortalInner() {
   // ------------- Loading / Error -------------
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-blue-50 dark:from-slate-950 dark:to-slate-900">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-secondary/20 to-background">
         <div className="text-center">
-          <Loader2 className="h-10 w-10 animate-spin text-blue-600 mx-auto" />
+          <Loader2 className="h-10 w-10 animate-spin text-primary mx-auto" />
           <p className="text-sm text-slate-500 mt-3">Loading your portal…</p>
         </div>
       </div>
@@ -216,7 +216,7 @@ function PortalInner() {
   const canPayOnline = payments.stripe || payments.razorpay;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 py-8 px-4">
+    <div className="min-h-screen bg-gradient-to-br from-background via-secondary/20 to-background py-8 px-4">
       <style dangerouslySetInnerHTML={{ __html: PRINT_STYLES }} />
       <div className="max-w-5xl mx-auto space-y-6">
         {/* Secure banner */}
@@ -228,7 +228,7 @@ function PortalInner() {
             </span>
           </div>
           <div className="flex items-center gap-2 text-xs text-slate-500">
-            <Link href="/login" className="hover:text-blue-600">Admin login</Link>
+            <Link href="/login" className="hover:text-primary">Admin login</Link>
           </div>
         </div>
 
@@ -412,7 +412,7 @@ function PortalInner() {
                         onClick={() => setFocusInvId(inv.id)}
                         className={[
                           "w-full text-left px-5 py-4 flex flex-col sm:flex-row sm:items-center gap-3 transition-colors",
-                          isFocus ? "bg-blue-50/70 dark:bg-blue-950/30" : "hover:bg-slate-50 dark:hover:bg-slate-900/40",
+                          isFocus ? "bg-secondary/30 dark:bg-primary/20" : "hover:bg-slate-50 dark:hover:bg-slate-900/40",
                         ].join(" ")}
                       >
                         <div className="flex-1 min-w-0">
@@ -447,7 +447,7 @@ function PortalInner() {
 
                       {/* Expanded actions for focused invoice */}
                       {isFocus && (
-                        <div className="px-5 pb-5 pt-1 bg-blue-50/40 dark:bg-blue-950/20">
+                        <div className="px-5 pb-5 pt-1 bg-secondary/20 dark:bg-primary/10">
                           {/* Totals breakdown */}
                           <div className="rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 mb-4">
                             <p className="text-xs uppercase tracking-wider text-slate-500 dark:text-slate-400 font-semibold mb-2">Invoice Summary</p>
@@ -603,7 +603,7 @@ export default function PortalPage() {
     <Suspense
       fallback={
         <div className="min-h-screen flex items-center justify-center">
-          <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
         </div>
       }
     >

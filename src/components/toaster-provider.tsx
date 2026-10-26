@@ -18,7 +18,7 @@ export function ToasterProvider() {
             "!bg-white dark:!bg-slate-900 !border !border-slate-200 dark:!border-slate-800 !text-slate-900 dark:!text-slate-100 !shadow-xl !rounded-xl",
           description: "!text-slate-500 dark:!text-slate-400",
           actionButton:
-            "!bg-blue-600 !text-white hover:!bg-blue-700 !h-8 !px-3 !rounded-lg !text-sm !font-medium",
+            "!bg-primary !text-primary-foreground hover:!bg-[#1e4d3f] !h-8 !px-3 !rounded-lg !text-sm !font-medium",
           cancelButton:
             "!bg-slate-100 dark:!bg-slate-800 !text-slate-700 dark:!text-slate-300 hover:!bg-slate-200 dark:hover:!bg-slate-700 !h-8 !px-3 !rounded-lg !text-sm !font-medium",
         },

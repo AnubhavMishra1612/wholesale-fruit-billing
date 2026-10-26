@@ -12,17 +12,35 @@ export const invoiceItemSchema = z.object({
     .min(1, "Description cannot be empty")
     .max(300, "Description must be at most 300 characters"),
 
-  /** Number of units; must be a positive integer (at least 1). */
+  /** Number of units or weight; must be positive with up to 3 decimal places (e.g. 14.650 kg). */
   quantity: z.coerce
     .number({ message: "Quantity must be a number" })
-    .int("Quantity must be a whole number")
-    .min(1, "Quantity must be at least 1"),
+    .positive("Quantity must be greater than zero")
+    .max(9999999.999, "Quantity exceeds maximum allowable limit"),
 
   /** Unit price; must be a non-negative number (allowing zero for freebies). */
   price: z.coerce
     .number({ message: "Price must be a number" })
     .min(0, "Price must be zero or greater")
     .multipleOf(0.01, "Price can have at most 2 decimal places"),
+
+  /** Optional fruit catalogue reference. */
+  fruitId: z.string().trim().optional().nullable(),
+
+  /** Optional historical fruit name snapshot. */
+  fruitName: z.string().trim().max(100).optional().nullable(),
+
+  /** Optional historical variety snapshot. */
+  fruitVariety: z.string().trim().max(100).optional().nullable(),
+
+  /** Optional unit reference. */
+  unitId: z.string().trim().optional().nullable(),
+
+  /** Optional historical unit code / name snapshot (e.g. kg, crt, box). */
+  unitName: z.string().trim().max(20).optional().nullable(),
+
+  /** Optional unit price snapshot applied at issue time. */
+  unitPriceSnapshot: z.coerce.number().min(0).optional().nullable(),
 });
 
 export type InvoiceItemInput = z.infer<typeof invoiceItemSchema>;
@@ -89,8 +107,8 @@ export type ClientInput = z.infer<typeof clientSchema>;
 // INVOICE VALIDATION SCHEMA
 // Validates an entire invoice including its line items.
 // ============================================================
-const invoiceStatusEnum = z.enum(["DRAFT", "PENDING", "PAID"], {
-  message: "Status must be DRAFT, PENDING, or PAID",
+const invoiceStatusEnum = z.enum(["DRAFT", "PENDING", "PARTIALLY_PAID", "PAID", "VOID"], {
+  message: "Status must be DRAFT, PENDING, PARTIALLY_PAID, PAID, or VOID",
 });
 const discountTypeEnum = z.enum(["PERCENT", "FIXED"], {
   message: "Discount type must be PERCENT or FIXED",
@@ -215,7 +233,7 @@ export const settingsSchema = z.object({
     .transform((s) => s.toUpperCase())
     .default("GST"),
   currency: z.string().trim().min(1).max(10).default("INR"),
-  brandColor: hexColor.default("#2563eb"),
+  brandColor: hexColor.default("#173D32"),
   defaultNotes: z
     .string()
     .trim()
@@ -425,3 +443,178 @@ export const DEFAULT_EXPENSE_CATEGORIES = [
   "Bank Fees",
   "General",
 ] as const;
+
+// ============================================================
+// WHOLESALE FRUIT & UNIT VALIDATION SCHEMAS
+// ============================================================
+
+export const fruitUnitSchema = z.object({
+  name: z
+    .string({ message: "Unit name is required" })
+    .trim()
+    .min(1, "Unit name cannot be empty")
+    .max(50, "Unit name must be at most 50 characters"),
+  code: z
+    .string({ message: "Unit code is required" })
+    .trim()
+    .min(1, "Unit code cannot be empty")
+    .max(20, "Unit code must be at most 20 characters")
+    .regex(/^[a-zA-Z0-9_-]+$/, "Unit code can only contain letters, numbers, hyphens, and underscores"),
+  isDefault: z.boolean().default(false),
+  isArchived: z.boolean().default(false),
+});
+export type FruitUnitInput = z.infer<typeof fruitUnitSchema>;
+
+export const fruitSchema = z.object({
+  name: z
+    .string({ message: "Fruit name is required" })
+    .trim()
+    .min(1, "Fruit name cannot be empty")
+    .max(100, "Fruit name must be at most 100 characters"),
+  variety: z
+    .string()
+    .trim()
+    .max(100, "Variety must be at most 100 characters")
+    .optional()
+    .nullable(),
+  category: z
+    .string()
+    .trim()
+    .max(50, "Category must be at most 50 characters")
+    .optional()
+    .nullable(),
+  hsnCode: z
+    .string()
+    .trim()
+    .max(20, "HSN code must be at most 20 characters")
+    .default("0808"),
+  defaultUnitId: z
+    .string()
+    .trim()
+    .optional()
+    .nullable(),
+  isActive: z.boolean().default(true),
+  isArchived: z.boolean().default(false),
+});
+export type FruitInput = z.infer<typeof fruitSchema>;
+
+export const dailyFruitPriceSchema = z.object({
+  fruitId: z.string({ message: "Fruit selection is required" }).trim().min(1),
+  unitId: z.string({ message: "Unit selection is required" }).trim().min(1),
+  effectiveDate: z
+    .string({ message: "Effective date is required" })
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "Effective date must be in YYYY-MM-DD format"),
+  price: z.coerce
+    .number({ message: "Price must be a number" })
+    .min(0, "Price cannot be negative")
+    .multipleOf(0.01, "Price can have at most 2 decimal places"),
+  notes: z.string().trim().max(1000).optional().nullable(),
+});
+export type DailyFruitPriceInput = z.infer<typeof dailyFruitPriceSchema>;
+
+export const bulkDailyPricesSchema = z.object({
+  effectiveDate: z
+    .string({ message: "Effective date is required" })
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "Effective date must be in YYYY-MM-DD format"),
+  prices: z
+    .array(
+      z.object({
+        fruitId: z.string().trim().min(1),
+        unitId: z.string().trim().min(1),
+        price: z.coerce.number().min(0).multipleOf(0.01),
+        notes: z.string().trim().max(500).optional().nullable(),
+      })
+    )
+    .min(1, "At least one price entry is required"),
+});
+export type BulkDailyPricesInput = z.infer<typeof bulkDailyPricesSchema>;
+
+export const customerFruitPriceSchema = z.object({
+  clientId: z.string({ message: "Customer selection is required" }).trim().min(1),
+  fruitId: z.string({ message: "Fruit selection is required" }).trim().min(1),
+  unitId: z.string({ message: "Unit selection is required" }).trim().min(1),
+  price: z.coerce
+    .number({ message: "Price must be a number" })
+    .min(0, "Price cannot be negative")
+    .multipleOf(0.01, "Price can have at most 2 decimal places"),
+  effectiveFrom: z
+    .string({ message: "Effective from date is required" })
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "Date must be in YYYY-MM-DD format"),
+  effectiveTo: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "Date must be in YYYY-MM-DD format")
+    .optional()
+    .nullable(),
+  notes: z.string().trim().max(1000).optional().nullable(),
+});
+export type CustomerFruitPriceInput = z.infer<typeof customerFruitPriceSchema>;
+
+// ============================================================
+// PAYMENT & LEDGER SCHEMAS
+// ============================================================
+
+export const paymentMethodEnum = z.enum(["CASH", "UPI", "BANK_TRANSFER", "CHEQUE", "OTHER"], {
+  message: "Invalid payment method",
+});
+
+export const paymentAllocationInputSchema = z.object({
+  invoiceId: z.string({ message: "Invoice ID is required" }).trim().min(1),
+  amount: z.coerce
+    .number({ message: "Allocation amount must be a number" })
+    .positive("Allocation amount must be greater than zero")
+    .multipleOf(0.01, "Amount can have at most 2 decimal places"),
+});
+
+export const paymentSchema = z.object({
+  clientId: z.string({ message: "Customer selection is required" }).trim().min(1),
+  amount: z.coerce
+    .number({ message: "Amount must be a number" })
+    .positive("Payment amount must be greater than zero")
+    .multipleOf(0.01, "Amount can have at most 2 decimal places"),
+  paymentDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "Payment date must be in YYYY-MM-DD format")
+    .optional(),
+  paymentMethod: paymentMethodEnum.default("CASH"),
+  referenceNumber: z.string().trim().max(100).optional().nullable(),
+  notes: z.string().trim().max(1000).optional().nullable(),
+  allocations: z.array(paymentAllocationInputSchema).optional().default([]),
+});
+export type PaymentInput = z.infer<typeof paymentSchema>;
+
+export const paymentRefundSchema = z.object({
+  paymentId: z.string({ message: "Payment reference is required" }).trim().min(1),
+  amount: z.coerce
+    .number({ message: "Refund amount must be a number" })
+    .positive("Refund amount must be greater than zero")
+    .multipleOf(0.01, "Amount can have at most 2 decimal places"),
+  paymentMethod: paymentMethodEnum.default("CASH"),
+  referenceNumber: z.string().trim().max(100).optional().nullable(),
+  reason: z
+    .string({ message: "Refund reason is required" })
+    .trim()
+    .min(2, "Reason must be at least 2 characters")
+    .max(1000, "Reason must be at most 1000 characters"),
+});
+export type PaymentRefundInput = z.infer<typeof paymentRefundSchema>;
+
+export const ledgerAdjustmentSchema = z.object({
+  clientId: z.string({ message: "Customer selection is required" }).trim().min(1),
+  type: z.enum(["CREDIT_NOTE", "DEBIT_NOTE", "BAD_DEBT_WRITE_OFF"], {
+    message: "Invalid adjustment type",
+  }),
+  amount: z.coerce
+    .number({ message: "Adjustment amount must be a number" })
+    .positive("Amount must be greater than zero")
+    .multipleOf(0.01, "Amount can have at most 2 decimal places"),
+  effectiveDate: z
+    .string({ message: "Effective date is required" })
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "Effective date must be in YYYY-MM-DD format"),
+  reason: z
+    .string({ message: "Adjustment reason is required" })
+    .trim()
+    .min(2, "Reason must be at least 2 characters")
+    .max(1000, "Reason must be at most 1000 characters"),
+  referenceNo: z.string().trim().max(100).optional().nullable(),
+});
+export type LedgerAdjustmentInput = z.infer<typeof ledgerAdjustmentSchema>;

@@ -6,6 +6,7 @@
  */
 import { formatMoney } from "@/lib/format-money";
 import { formatDate } from "@/lib/utils";
+import { DEFAULT_BRAND_COLOR } from "@/lib/branding";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -124,7 +125,7 @@ interface Internal extends Omit<InvoiceEmailParams, "issueDate" | "dueDate"> {
 
 function buildHtml(p: Internal): string {
   const isReminder = p.variant === "reminder";
-  const defaultAccent = "#2563eb";
+  const defaultAccent = DEFAULT_BRAND_COLOR;
   const brand = p.brandColor && /^#([0-9a-fA-F]{3}){1,2}$/.test(p.brandColor) ? p.brandColor : defaultAccent;
   const accent = isReminder ? "#dc2626" : brand; // red for overdue reminders; otherwise brand color
   const title = isReminder ? "Payment Reminder" : "New Invoice";

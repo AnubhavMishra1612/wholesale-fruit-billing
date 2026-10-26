@@ -79,7 +79,7 @@ export async function sendInvoiceEmail(input: SendInvoiceEmailInput): Promise<Se
     currency: settings.currency,
     items: invoice.items.map((i) => ({
       description: i.description,
-      quantity: i.quantity,
+      quantity: Number(i.quantity),
       price: Number(i.price),
       total: Number(i.total),
     })),

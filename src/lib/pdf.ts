@@ -7,7 +7,7 @@
  * resolution hiccups similar to what we hit with argon2.
  */
 import { prisma } from "@/lib/prisma";
-import { getBrandingForUser, darken } from "@/lib/branding";
+import { getBrandingForUser, darken, DEFAULT_BRAND_COLOR } from "@/lib/branding";
 import type { InvoiceWithRelations } from "@/types";
 
 export interface PdfSettings {
@@ -21,7 +21,7 @@ export interface PdfSettings {
   // to the initial-letter badge.
   logoBase64?: string | null;
   logoContentType?: string | null;
-  brandColor?: string; // hex accent (default #2563eb)
+  brandColor?: string; // hex accent (default DEFAULT_BRAND_COLOR)
 }
 
 export interface InvoicePdfData {
@@ -153,7 +153,7 @@ export async function renderInvoicePdfToBuffer(
     ? (rawBrand.length === 4
         ? `#${rawBrand[1]}${rawBrand[1]}${rawBrand[2]}${rawBrand[2]}${rawBrand[3]}${rawBrand[3]}`
         : rawBrand.toLowerCase())
-    : "#2563eb";
+    : DEFAULT_BRAND_COLOR;
   const brandDark = darken(brand, 0.22);
   // Build a soft tint of the brand for the "Bill To" card (light bg).
   const brandTint = (() => {
@@ -478,15 +478,37 @@ export async function renderInvoicePdfToBuffer(
           React.createElement(View, { style: styles.colPrice }, React.createElement(Text, { style: styles.tableHeaderCell }, "Unit Price")),
           React.createElement(View, { style: styles.colAmount }, React.createElement(Text, { style: styles.tableHeaderCell }, "Amount"))
         ),
-        ...invoice.items.map((it, i) =>
-          React.createElement(View, { key: it.id, style: i === invoice.items.length - 1 ? styles.tableRowLast : styles.tableRow },
+        ...invoice.items.map((it, i) => {
+          const numQty = Number(it.quantity);
+          const formattedQty = Number.isInteger(numQty)
+            ? String(numQty)
+            : numQty.toFixed(3).replace(/\.?0+$/, "");
+          const qtyLabel = it.unitName ? `${formattedQty} ${it.unitName}` : formattedQty;
+
+          const desc = it.fruitName
+            ? `${it.fruitName}${it.fruitVariety ? ` (${it.fruitVariety})` : ""}${
+                it.description &&
+                it.description !== it.fruitName &&
+                it.description !== `${it.fruitName} (${it.fruitVariety})`
+                  ? ` - ${it.description}`
+                  : ""
+              }`
+            : it.description;
+
+          const priceLabel = it.unitName
+            ? `${fmtMoney(Number(it.price))}/${it.unitName}`
+            : fmtMoney(Number(it.price));
+
+          return React.createElement(
+            View,
+            { key: it.id, style: i === invoice.items.length - 1 ? styles.tableRowLast : styles.tableRow },
             React.createElement(View, { style: styles.colIdx }, React.createElement(Text, { style: styles.idxCell }, String(i + 1))),
-            React.createElement(View, { style: styles.colDesc }, React.createElement(Text, { style: styles.descCell }, it.description)),
-            React.createElement(View, { style: styles.colQty }, React.createElement(Text, { style: styles.numCell }, String(it.quantity))),
-            React.createElement(View, { style: styles.colPrice }, React.createElement(Text, { style: styles.numCell }, fmtMoney(Number(it.price)))),
+            React.createElement(View, { style: styles.colDesc }, React.createElement(Text, { style: styles.descCell }, desc)),
+            React.createElement(View, { style: styles.colQty }, React.createElement(Text, { style: styles.numCell }, qtyLabel)),
+            React.createElement(View, { style: styles.colPrice }, React.createElement(Text, { style: styles.numCell }, priceLabel)),
             React.createElement(View, { style: styles.colAmount }, React.createElement(Text, { style: styles.numCellBold }, fmtMoney(Number(it.total))))
-          )
-        )
+          );
+        })
       ),
 
       // Totals

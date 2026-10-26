@@ -29,7 +29,7 @@ export function PortalLinkSection({ clientId, clientName, clientEmail, initialTo
     <Card className="border-slate-200/60 dark:border-slate-800/60">
       <CardContent className="pt-6">
         <div className="flex items-center gap-2 mb-2">
-          <Link2 className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
+          <Link2 className="h-4 w-4 text-primary dark:text-secondary" />
           <p className="text-sm font-semibold text-slate-900 dark:text-white">Client Portal</p>
         </div>
         <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">

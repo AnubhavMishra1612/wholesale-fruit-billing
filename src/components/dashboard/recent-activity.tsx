@@ -48,9 +48,9 @@ const TYPE_ICON: Record<string, typeof Plus> = {
 const TYPE_COLOR: Record<string, string> = {
   CREATED: "text-slate-600 bg-slate-100 dark:bg-slate-800 dark:text-slate-300",
   EDITED: "text-slate-600 bg-slate-100 dark:bg-slate-800 dark:text-slate-300",
-  SENT: "text-blue-600 bg-blue-100 dark:bg-blue-950/50 dark:text-blue-400",
+  SENT: "text-primary bg-secondary dark:bg-primary/40 dark:text-secondary",
   REMINDED: "text-amber-600 bg-amber-100 dark:bg-amber-950/40 dark:text-amber-400",
-  VIEWED: "text-indigo-600 bg-indigo-100 dark:bg-indigo-950/40 dark:text-indigo-400",
+  VIEWED: "text-primary bg-secondary/60 dark:bg-primary/30 dark:text-secondary",
   PAID: "text-emerald-600 bg-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-400",
   PAYMENT_FAILED: "text-red-600 bg-red-100 dark:bg-red-950/40 dark:text-red-400",
   MARKED_PAID: "text-emerald-600 bg-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-400",
@@ -87,7 +87,7 @@ export function RecentActivity({ limit = 8 }: { limit?: number }) {
     <Card className="border-slate-200/60 dark:border-slate-800">
       <CardHeader className="pb-3 flex flex-row items-center justify-between">
         <CardTitle className="text-base flex items-center gap-2">
-          <Activity className="h-4 w-4 text-indigo-500" /> Recent Activity
+          <Activity className="h-4 w-4 text-primary" /> Recent Activity
         </CardTitle>
       </CardHeader>
       <CardContent className="pt-0">
@@ -117,7 +117,7 @@ export function RecentActivity({ limit = 8 }: { limit?: number }) {
                       {a.invoiceId ? (
                         <Link
                           href={`/invoices/${a.invoiceId}`}
-                          className="font-mono font-semibold text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
+                          className="font-mono font-semibold text-primary hover:underline dark:text-secondary"
                         >
                           {a.invoiceNumber}
                         </Link>

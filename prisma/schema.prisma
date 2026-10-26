@@ -1,9 +1,7 @@
-// Prisma schema for Smart Billing Application
-// Uses PostgreSQL as the database provider
-//
-// Multi-tenant: every Client, Invoice, and Settings row belongs to a User.
-// All write queries are scoped by userId (from session), and uniqueness
-// constraints are scoped per-user where appropriate.
+// Prisma schema for Wholesale Fruit Billing Application
+// Database Provider: PostgreSQL
+// Multi-tenant: Every business entity is partitioned by userId (session user ID).
+// Client and payment relations enforce composite foreign keys to guarantee tenant & customer isolation.
 
 generator client {
   provider = "prisma-client-js"
@@ -15,7 +13,7 @@ datasource db {
 }
 
 // ============================================================
-// USER MODEL
+// 1. USER & TENANT CORE
 // ============================================================
 model User {
   id                String     @id @default(cuid())
@@ -33,51 +31,46 @@ model User {
   expenses           Expense[]
   recurringProfiles  RecurringProfile[]
   activities         InvoiceActivity[]
+  fruitUnits         FruitUnit[]
+  fruits             Fruit[]
+  dailyPrices        DailyFruitPrice[]
+  customerPrices     CustomerFruitPrice[]
+  payments           Payment[]
+  paymentRefunds     PaymentRefund[]
+  paymentAllocations PaymentAllocation[]
+  ledgerAdjustments  LedgerAdjustment[]
+  dailySequences     DailySequence[]
+  auditLogs          AuditLog[]
 
   @@map("users")
 }
 
 // ============================================================
-// SETTINGS MODEL
+// 2. BUSINESS PROFILE & SETTINGS
 // ============================================================
-// One row per user (userId is unique). Created lazily on first
-// access via prisma.settings.upsert({ where: { userId }, ... }).
 model Settings {
-  id              Int      @id @default(autoincrement())
-  userId          String   @unique
-  companyName     String   @default("Your Business Name")
-  companyEmail    String   @default("billing@example.com")
-  companyAddress  String?
-  companyPhone    String?
-  defaultTaxRate  Decimal  @default(0) @db.Decimal(5, 2)
-  // Label shown next to the tax amount (e.g. "GST", "VAT", "TAX", "IGST").
-  // Up to 12 chars; defaults to "GST" for INR merchants, "TAX" otherwise.
-  taxLabel        String   @default("GST")
-  currency        String   @default("INR")
-  // Optional company logo (base64 data URI, max ~1 MB after client resize).
-  // Used on invoice PDFs and in email headers. Displayed at up to ~180px
-  // wide / 60px tall. null/empty = no logo (falls back to initial badge).
-  logoData        String?  @db.Text
-  logoContentType String?
-  // Accent/brand color (hex, e.g. "#2563eb"). Used for PDF accent bar,
-  // invoice title, CTA buttons in emails, and totals highlight.
-  brandColor      String   @default("#2563eb")
-  // Default terms/notes pre-filled on every new invoice (e.g. payment
-  // instructions, bank details, late-fee policy). Can be overridden per
-  // invoice.
-  defaultNotes    String?  @db.Text
-  // Default due days (0 = due on receipt, N = due in N days). Pre-fills
-  // due date when creating a new invoice.
-  defaultDueDays  Int      @default(30)
-  // Invoice number prefix (alphanumeric, e.g. "INV", "ACME", "BIL").
-  // Generator produces: <PREFIX><sep>YYYYMMDD<sep>NNNN.
-  invoicePrefix   String   @default("INV")
-  // Separator between prefix, date, and sequence number. Default "-".
-  invoiceSeparator String  @default("-")
-  // Zero-padding of sequence number. Default 4 (→ 0001).
-  invoicePad      Int      @default(4)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id               Int      @id @default(autoincrement())
+  userId           String   @unique
+  companyName      String   @default("Your Business Name")
+  companyEmail     String   @default("billing@example.com")
+  companyAddress   String?
+  companyPhone     String?
+  mandiLicenseNo   String?  // Mandi / APMC trader license number
+  gstin            String?  // GSTIN tax identification
+  defaultTaxRate   Decimal  @default(0) @db.Decimal(5, 2)
+  taxLabel         String   @default("GST")
+  currency         String   @default("INR")
+  logoData         String?  @db.Text
+  logoContentType  String?
+  brandColor       String   @default("#173D32")
+  defaultNotes     String?  @db.Text
+  defaultDueDays   Int      @default(30)
+  invoicePrefix    String   @default("INV")
+  invoiceSeparator String   @default("-")
+  invoicePad       Int      @default(4)
+  receiptPrefix    String   @default("RCP")
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -85,88 +78,205 @@ model Settings {
 }
 
 // ============================================================
-// CLIENT MODEL
+// 3. ATOMIC NUMBERING SEQUENCER (CONCURRENCY-SAFE)
 // ============================================================
-// Uniqueness of email is scoped to the owning user (two tenants
-// can each have a client with the same email).
-model Client {
-  id        String    @id @default(cuid())
+// Eliminates TOCTOU race conditions during simultaneous invoice/receipt/refund generation.
+model DailySequence {
+  id        String   @id @default(cuid())
   userId    String
-  name      String
-  email     String
-  address   String?
-  phone     String?
-  // Free-form internal notes about this client (e.g. preferred contact method,
-  // billing preferences, account manager). Not shown to the client.
-  notes     String?   @db.Text
-  // Optional per-client payment term override (in days). When set, creating an
-  // invoice for this client uses this value instead of the user's
-  // defaultDueDays. null/undefined means fall back to user default.
-  dueDays   Int?
-  // Random, non-guessable token used as the key for the client portal URL
-  // (/portal/<token>). Generated on creation; can be rotated from the admin UI.
-  portalToken String @default(cuid()) @unique
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  dateKey   String   // Format: "YYYYMMDD" evaluated in Asia/Calcutta (IST)
+  prefix    String   // "INV", "RCP", "RFD"
+  lastSeq   Int      @default(0)
+  updatedAt DateTime @updatedAt
 
-  user     User               @relation(fields: [userId], references: [id], onDelete: Cascade)
-  invoices Invoice[]
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, dateKey, prefix], name: "daily_sequence_per_tenant")
+  @@index([userId, dateKey])
+  @@map("daily_sequences")
+}
+
+// ============================================================
+// 4. FRUIT UNITS (UOM)
+// ============================================================
+model FruitUnit {
+  id         String   @id @default(cuid())
+  userId     String
+  name       String   // "Kilogram", "Crate", "Box", "Bag", "Dozen"
+  code       String   // "kg", "crt", "box", "bag", "doz"
+  isDefault  Boolean  @default(false)
+  isArchived Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  user           User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  fruits         Fruit[]
+  dailyPrices    DailyFruitPrice[]
+  customerPrices CustomerFruitPrice[]
+  invoiceItems   InvoiceItem[]
+  recurringItems RecurringItem[]
+
+  @@unique([id, userId], name: "unit_tenant_composite")
+  @@unique([userId, code], name: "unit_code_per_user")
+  @@index([userId, isArchived])
+  @@map("fruit_units")
+}
+
+// ============================================================
+// 5. FRUIT CATALOGUE
+// ============================================================
+model Fruit {
+  id            String   @id @default(cuid())
+  userId        String
+  name          String   // e.g. "Apple"
+  variety       String?  // e.g. "Kashmiri Delicious"
+  category      String?  // e.g. "Pome"
+  hsnCode       String?  @default("0808")
+  defaultUnitId String?
+  isActive      Boolean  @default(true)
+  isArchived    Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  user           User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  defaultUnit    FruitUnit?           @relation(fields: [defaultUnitId], references: [id], onDelete: SetNull)
+  dailyPrices    DailyFruitPrice[]
+  customerPrices CustomerFruitPrice[]
+  invoiceItems   InvoiceItem[]
+  recurringItems RecurringItem[]
+
+  @@unique([id, userId], name: "fruit_tenant_composite")
+  @@index([userId, isActive, isArchived])
+  @@index([userId, name])
+  @@map("fruits")
+}
+
+// ============================================================
+// 6. DAILY FRUIT PRICE HISTORY
+// ============================================================
+model DailyFruitPrice {
+  id            String   @id @default(cuid())
+  userId        String
+  fruitId       String
+  unitId        String
+  effectiveDate DateTime @db.Date // Rate date (IST morning market rate)
+  price         Decimal  @db.Decimal(12, 2)
+  notes         String?  @db.Text
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  user  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  fruit Fruit     @relation(fields: [fruitId, userId], references: [id, userId], onDelete: Restrict)
+  unit  FruitUnit @relation(fields: [unitId, userId], references: [id, userId], onDelete: Restrict)
+
+  @@unique([userId, fruitId, unitId, effectiveDate], name: "daily_fruit_price_per_user")
+  @@index([userId, effectiveDate])
+  @@index([fruitId, effectiveDate])
+  @@map("daily_fruit_prices")
+}
+
+// ============================================================
+// 7. CUSTOMER-SPECIFIC NEGOTIATED PRICE HISTORY
+// ============================================================
+model CustomerFruitPrice {
+  id            String    @id @default(cuid())
+  userId        String
+  clientId      String
+  fruitId       String
+  unitId        String
+  price         Decimal   @db.Decimal(12, 2)
+  effectiveFrom DateTime  @db.Date
+  effectiveTo   DateTime? @db.Date // Null = indefinite active contract
+  notes         String?   @db.Text
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  user   User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  client Client    @relation(fields: [clientId, userId], references: [id, userId], onDelete: Restrict)
+  fruit  Fruit     @relation(fields: [fruitId, userId], references: [id, userId], onDelete: Restrict)
+  unit   FruitUnit @relation(fields: [unitId, userId], references: [id, userId], onDelete: Restrict)
+
+  @@unique([userId, clientId, fruitId, unitId, effectiveFrom], name: "customer_fruit_price_version")
+  @@index([userId, clientId, effectiveFrom])
+  @@map("customer_fruit_prices")
+}
+
+// ============================================================
+// 8. CLIENT MODEL
+// ============================================================
+model Client {
+  id             String   @id @default(cuid())
+  userId         String
+  name           String
+  email          String
+  address        String?
+  phone          String?
+  notes          String?  @db.Text
+  dueDays        Int?
+  portalToken    String   @unique @default(cuid())
+  openingBalance Decimal  @default(0) @db.Decimal(12, 2) // Signed: + debtor, - creditor
+  isArchived     Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  user              User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  invoices          Invoice[]
   recurringProfiles RecurringProfile[]
+  customerPrices    CustomerFruitPrice[]
+  payments          Payment[]
+  paymentRefunds    PaymentRefund[]
+  allocations       PaymentAllocation[]
+  ledgerAdjustments LedgerAdjustment[]
 
+  @@unique([id, userId], name: "client_tenant_composite")
   @@unique([userId, email], name: "client_email_per_user")
-  @@index([userId])
+  @@index([userId, isArchived])
   @@map("clients")
 }
 
 // ============================================================
-// INVOICE MODEL
+// 9. INVOICE MODEL
 // ============================================================
-// invoiceNumber is unique globally so the public /view/:id link
-// never collides between tenants. userId is included for fast
-// tenant-scoped queries, and we cascade deletes through the
-// client relation as before.
 model Invoice {
-  id            String        @id @default(cuid())
-  userId        String
-  invoiceNumber String        @unique
-  clientId      String
-  status        InvoiceStatus @default(DRAFT)
-  issueDate     DateTime      @db.Date
-  dueDate       DateTime      @db.Date
-  subtotal      Decimal       @db.Decimal(12, 2)
-  // Discount (applied pre-tax). discountType controls whether discountValue
-  // is treated as a percentage (0..100) or a flat amount in the invoice
-  // currency. Default NULL means no discount.
-  discountType  DiscountType?
-  discountValue Decimal?      @db.Decimal(12, 2)
-  discountAmount Decimal      @default(0) @db.Decimal(12, 2) // computed absolute discount in currency
-  taxRate       Decimal       @default(0) @db.Decimal(5, 2)
-  // Label shown next to the tax line for this invoice (copied from settings
-  // at create-time so changing settings later doesn't rewrite historical
-  // invoices).
-  taxLabel      String        @default("GST")
-  totalAmount   Decimal       @db.Decimal(12, 2)
-  notes         String?       @db.Text
-  paidAt        DateTime?
-  lastSentAt    DateTime?
-  lastRemindedAt DateTime?
-  stripeCheckoutSessionId String? @unique
-  stripePaymentIntentId String?
-  razorpayOrderId String?
-  razorpayPaymentId String?
-  razorpaySignature String?
-  // Recurring profile that generated this invoice (set automatically when
-  // created by the recurring generator; null for one-off invoices).
-  recurringProfileId String?
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
+  id                      String        @id @default(cuid())
+  userId                  String
+  invoiceNumber           String
+  clientId                String
+  status                  InvoiceStatus @default(DRAFT)
+  issueDate               DateTime      @db.Date
+  dueDate                 DateTime      @db.Date
+  subtotal                Decimal       @db.Decimal(12, 2)
+  discountType            DiscountType?
+  discountValue           Decimal?      @db.Decimal(12, 2)
+  discountAmount          Decimal       @default(0) @db.Decimal(12, 2)
+  taxRate                 Decimal       @default(0) @db.Decimal(5, 2)
+  taxLabel                String        @default("GST")
+  totalAmount             Decimal       @db.Decimal(12, 2)
+  paidAmount              Decimal       @default(0) @db.Decimal(12, 2)
+  balanceAmount           Decimal       @default(0) @db.Decimal(12, 2)
+  notes                   String?       @db.Text
+  paidAt                  DateTime?
+  lastSentAt              DateTime?
+  lastRemindedAt          DateTime?
+  stripeCheckoutSessionId String?       @unique
+  stripePaymentIntentId   String?
+  razorpayOrderId         String?
+  razorpayPaymentId       String?
+  razorpaySignature       String?
+  recurringProfileId      String?
+  createdAt               DateTime      @default(now())
+  updatedAt               DateTime      @updatedAt
 
-  user     User             @relation(fields: [userId], references: [id], onDelete: Cascade)
-  client   Client           @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  items    InvoiceItem[]
-  recurring RecurringProfile? @relation(fields: [recurringProfileId], references: [id], onDelete: SetNull)
-  activities InvoiceActivity[]
+  user        User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  client      Client              @relation(fields: [clientId, userId], references: [id, userId], onDelete: Restrict)
+  items       InvoiceItem[]
+  allocations PaymentAllocation[]
+  recurring   RecurringProfile?   @relation(fields: [recurringProfileId], references: [id], onDelete: SetNull)
+  activities  InvoiceActivity[]
 
+  @@unique([userId, invoiceNumber], name: "invoice_number_per_user")
+  @@unique([id, userId, clientId], name: "invoice_tenant_client_composite")
+  @@unique([id, userId], name: "invoice_tenant_composite")
   @@index([userId])
   @@index([clientId])
   @@index([userId, status])
@@ -174,53 +284,189 @@ model Invoice {
 }
 
 // ============================================================
-// INVOICE ITEM MODEL
+// 10. INVOICE ITEM MODEL (SNAPSHOTS & DECIMAL WEIGHTS)
 // ============================================================
 model InvoiceItem {
-  id          String  @id @default(cuid())
-  invoiceId   String
-  description String
-  quantity    Int     @default(1)
-  price       Decimal @db.Decimal(12, 2)
-  total       Decimal @db.Decimal(12, 2)
+  id                String   @id @default(cuid())
+  invoiceId         String
+  description       String
+  quantity          Decimal  @default(1) @db.Decimal(10, 3) // Capacity: 0.001 to 9,999,999.999
+  price             Decimal  @db.Decimal(12, 2)
+  total             Decimal  @db.Decimal(12, 2)
+  fruitId           String?
+  fruitName         String?  // Immutable snapshot at issue time
+  fruitVariety      String?  // Immutable snapshot at issue time
+  unitId            String?
+  unitName          String?  // Immutable snapshot at issue time (e.g. "kg")
+  unitPriceSnapshot Decimal? @db.Decimal(12, 2)
 
-  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  invoice Invoice    @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  fruit   Fruit?     @relation(fields: [fruitId], references: [id], onDelete: Restrict)
+  unit    FruitUnit? @relation(fields: [unitId], references: [id], onDelete: Restrict)
 
   @@index([invoiceId])
+  @@index([fruitId])
   @@map("invoice_items")
 }
 
 // ============================================================
-// RECURRING PROFILE MODEL
+// 11. PAYMENT MODEL (RECEIPTS & UNALLOCATED CREDITS)
 // ============================================================
-// Template for auto-generated invoices. When `active` is true and
-// `nextRunAt` <= now, the cron endpoint (/api/cron/generate-recurring)
-// will issue a new Invoice using this profile's clientId, line items,
-// taxRate, notes, and frequency, then advance `nextRunAt`.
+model Payment {
+  id                String        @id @default(cuid())
+  userId            String
+  clientId          String
+  receiptNumber     String        @unique // Format: "RCP-YYYYMMDD-0001"
+  amount            Decimal       @db.Decimal(12, 2) // Gross cash/funds received
+  allocatedAmount   Decimal       @default(0) @db.Decimal(12, 2) // Sum of ACTIVE allocations
+  refundedAmount    Decimal       @default(0) @db.Decimal(12, 2) // Sum of COMPLETED refunds
+  unallocatedAmount Decimal       @default(0) @db.Decimal(12, 2) // amount - allocatedAmount - refundedAmount
+  paymentDate       DateTime      @default(now())
+  paymentMethod     PaymentMethod @default(CASH)
+  status            PaymentStatus @default(COMPLETED)
+  referenceNumber   String?       // UTR, Cheque No, or UPI Reference
+  notes             String?       @db.Text
+  voidReason        String?       @db.Text
+  voidedAt          DateTime?
+  voidedBy          String?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  user        User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  client      Client              @relation(fields: [clientId, userId], references: [id, userId], onDelete: Restrict)
+  allocations PaymentAllocation[]
+  refunds     PaymentRefund[]
+
+  @@unique([id, userId, clientId], name: "payment_tenant_client_composite")
+  @@unique([id, userId], name: "payment_tenant_composite")
+  @@index([userId, clientId])
+  @@index([userId, paymentDate])
+  @@index([userId, status])
+  @@map("payments")
+}
+
+// ============================================================
+// 12. PAYMENT ALLOCATION MODEL (REVERSIBLE & AUDITABLE)
+// ============================================================
+model PaymentAllocation {
+  id             String           @id @default(cuid())
+  userId         String
+  clientId       String           // Enforces tenant & customer match via composite FK
+  paymentId      String
+  invoiceId      String
+  amount         Decimal          @db.Decimal(12, 2)
+  status         AllocationStatus @default(ACTIVE)
+  allocatedAt    DateTime         @default(now())
+  reversedAt     DateTime?
+  reversalReason String?          @db.Text
+  reversedBy     String?
+  notes          String?
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  client  Client  @relation(fields: [clientId, userId], references: [id, userId], onDelete: Restrict)
+  payment Payment @relation(fields: [paymentId, userId, clientId], references: [id, userId, clientId], onDelete: Restrict)
+  invoice Invoice @relation(fields: [invoiceId, userId, clientId], references: [id, userId, clientId], onDelete: Restrict)
+
+  @@index([userId, invoiceId, status])
+  @@index([paymentId, status])
+  @@map("payment_allocations")
+}
+
+// ============================================================
+// 13. PAYMENT REFUND MODEL (CASH OUTFLOW TO CLIENT)
+// ============================================================
+model PaymentRefund {
+  id              String        @id @default(cuid())
+  userId          String
+  clientId        String
+  paymentId       String        // Tied directly to the source payment receipt
+  refundNumber    String        @unique // e.g. "RFD-YYYYMMDD-0001"
+  amount          Decimal       @db.Decimal(12, 2)
+  refundDate      DateTime      @default(now())
+  paymentMethod   PaymentMethod @default(CASH)
+  status          RefundStatus  @default(COMPLETED)
+  referenceNumber String?
+  reason          String        @db.Text
+  voidReason      String?       @db.Text
+  voidedAt        DateTime?
+  voidedBy        String?
+  createdAt       DateTime      @default(now())
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  client  Client  @relation(fields: [clientId, userId], references: [id, userId], onDelete: Restrict)
+  payment Payment @relation(fields: [paymentId, userId, clientId], references: [id, userId, clientId], onDelete: Restrict)
+
+  @@index([userId, clientId])
+  @@index([userId, refundDate])
+  @@map("payment_refunds")
+}
+
+// ============================================================
+// 14. LEDGER ADJUSTMENTS (DEBIT/CREDIT NOTES & WRITE-OFFS)
+// ============================================================
+model LedgerAdjustment {
+  id            String         @id @default(cuid())
+  userId        String
+  clientId      String
+  type          AdjustmentType // CREDIT_NOTE, DEBIT_NOTE, BAD_DEBT_WRITE_OFF
+  amount        Decimal        @db.Decimal(12, 2)
+  effectiveDate DateTime       @db.Date
+  reason        String         @db.Text
+  referenceNo   String?
+  createdAt     DateTime       @default(now())
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  client Client @relation(fields: [clientId, userId], references: [id, userId], onDelete: Restrict)
+
+  @@index([userId, clientId, effectiveDate])
+  @@map("ledger_adjustments")
+}
+
+// ============================================================
+// 15. AUDIT LOG (FINANCIAL & PRICING AUDIT TRAIL)
+// ============================================================
+model AuditLog {
+  id         String   @id @default(cuid())
+  userId     String
+  entityType String   // "DAILY_PRICE", "CUSTOMER_PRICE", "PAYMENT", "ALLOCATION", "INVOICE", "REFUND"
+  entityId   String
+  action     String   // "CREATED", "UPDATED", "VOIDED", "REVERSED", "BULK_UPDATED"
+  actorId    String?
+  ip         String?
+  changes    Json?    // Serialized { before, after } state
+  notes      String?  @db.Text
+  createdAt  DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, entityType, entityId])
+  @@index([userId, createdAt])
+  @@map("audit_logs")
+}
+
+// ============================================================
+// 16. RECURRING PROFILES & ITEMS
+// ============================================================
 model RecurringProfile {
-  id           String          @id @default(cuid())
+  id           String              @id @default(cuid())
   userId       String
   clientId     String
-  frequency    RecurrenceFrequency // WEEKLY, MONTHLY, YEARLY, CUSTOM_DAYS
-  intervalDays Int?            // when frequency=CUSTOM_DAYS, interval in days
-  // Default terms (issue date = today; due date = today + dueInDays).
-  dueInDays    Int             @default(30)
-  taxRate      Decimal         @default(0) @db.Decimal(5, 2)
-  notes        String?         @db.Text
-  // What to do after generation: DRAFT (just create) or AUTO_SEND (mark
-  // PENDING + email the client with a Pay Now link).
-  autoSend     Boolean         @default(true)
-  active       Boolean         @default(true)
-  // Anchor date used to compute the *next* issue date. Updated after each run.
+  frequency    RecurrenceFrequency
+  intervalDays Int?
+  dueInDays    Int                 @default(30)
+  taxRate      Decimal             @default(0) @db.Decimal(5, 2)
+  notes        String?             @db.Text
+  autoSend     Boolean             @default(true)
+  active       Boolean             @default(true)
   nextRunAt    DateTime
-  endDate      DateTime?       // optional stop date
+  endDate      DateTime?
   lastRunAt    DateTime?
-  createdAt    DateTime        @default(now())
-  updatedAt    DateTime        @updatedAt
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
 
-  user   User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  client Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  items  RecurringItem[]
+  user     User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  client   Client          @relation(fields: [clientId, userId], references: [id, userId], onDelete: Restrict)
+  items    RecurringItem[]
   invoices Invoice[]
 
   @@index([userId, active, nextRunAt])
@@ -229,36 +475,35 @@ model RecurringProfile {
 }
 
 model RecurringItem {
-  id          String  @id @default(cuid())
+  id          String   @id @default(cuid())
   profileId   String
   description String
-  quantity    Int     @default(1)
-  price       Decimal @db.Decimal(12, 2)
+  quantity    Decimal  @default(1) @db.Decimal(10, 3)
+  price       Decimal  @db.Decimal(12, 2)
+  fruitId     String?
+  unitId      String?
+  unitName    String?
 
   profile RecurringProfile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  fruit   Fruit?           @relation(fields: [fruitId], references: [id], onDelete: SetNull)
+  unit    FruitUnit?       @relation(fields: [unitId], references: [id], onDelete: SetNull)
 
   @@index([profileId])
   @@map("recurring_items")
 }
 
 // ============================================================
-// INVOICE ACTIVITY MODEL
+// 17. INVOICE ACTIVITY (EXISTING TIMELINE AUDIT)
 // ============================================================
-// Append-only audit log of notable events for an invoice. Rendered as the
-// "Activity" timeline on invoice detail pages. Write-only — never updated
-// or deleted; events are created by the server on send/remind/pay/view/etc.
 model InvoiceActivity {
-  id        String            @id @default(cuid())
+  id        String              @id @default(cuid())
   invoiceId String
   userId    String
   type      InvoiceActivityType
-  message   String?           @db.Text
-  // IP address of the actor (for client views this is the public IP; for
-  // admin actions it's the admin's IP). Useful for audit/debug.
+  message   String?             @db.Text
   ip        String?
-  // Optional structured metadata (e.g., payment provider, amount, email).
   meta      Json?
-  createdAt DateTime          @default(now())
+  createdAt DateTime            @default(now())
 
   invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
   user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -269,13 +514,64 @@ model InvoiceActivity {
 }
 
 // ============================================================
-// ENUMS
+// 18. EXPENSE MODEL
+// ============================================================
+model Expense {
+  id          String   @id @default(cuid())
+  userId      String
+  date        DateTime @db.Date
+  category    String   @default("General")
+  description String
+  amount      Decimal  @db.Decimal(12, 2)
+  notes       String?  @db.Text
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, date])
+  @@index([userId, category])
+  @@map("expenses")
+}
+
+// ============================================================
+// 19. ENUMS
 // ============================================================
 enum InvoiceStatus {
   DRAFT
   PENDING
+  PARTIALLY_PAID
   PAID
   VOID
+}
+
+enum PaymentStatus {
+  COMPLETED
+  VOIDED
+}
+
+enum AllocationStatus {
+  ACTIVE
+  REVERSED
+}
+
+enum RefundStatus {
+  COMPLETED
+  VOIDED
+}
+
+enum PaymentMethod {
+  CASH
+  UPI
+  BANK_TRANSFER
+  CHEQUE
+  OTHER
+}
+
+enum AdjustmentType {
+  CREDIT_NOTE
+  DEBIT_NOTE
+  BAD_DEBT_WRITE_OFF
 }
 
 enum RecurrenceFrequency {
@@ -307,29 +603,3 @@ enum DiscountType {
   PERCENT
   FIXED
 }
-
-// ============================================================
-// EXPENSE MODEL
-// ============================================================
-// Track business expenses (software subscriptions, contractor
-// payments, materials, etc.) for P&L reporting. Currency matches
-// the user's settings.currency; optional category for grouping.
-model Expense {
-  id          String   @id @default(cuid())
-  userId      String
-  date        DateTime @db.Date
-  category    String   @default("General") // e.g. Software, Travel, Materials, Marketing
-  description String
-  amount      Decimal  @db.Decimal(12, 2)
-  notes       String?  @db.Text
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId, date])
-  @@index([userId, category])
-  @@map("expenses")
-}
-
-// Back-relation from User to Expense (add to User model below).

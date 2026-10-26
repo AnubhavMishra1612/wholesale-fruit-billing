@@ -127,10 +127,10 @@ export function LogoUploader({ logoUrl, onUploaded, onRemoved }: LogoUploaderPro
         className={[
           "relative rounded-xl border-2 border-dashed transition-all p-6 text-center",
           dragOver
-            ? "border-blue-500 bg-blue-50 dark:bg-blue-950/30"
+            ? "border-primary bg-secondary/50 dark:bg-primary/20"
             : hasLogo
-              ? "border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-900/40"
-              : "border-slate-300 dark:border-slate-700 hover:border-blue-400 dark:hover:border-blue-600 bg-white dark:bg-slate-950",
+              ? "border-border bg-muted/40"
+              : "border-border hover:border-primary bg-card",
         ].join(" ")}
       >
         {hasLogo ? (
@@ -194,7 +194,7 @@ export function LogoUploader({ logoUrl, onUploaded, onRemoved }: LogoUploaderPro
           <div className="flex flex-col items-center gap-3">
             <div className="h-12 w-12 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center">
               {busy ? (
-                <Loader2 className="h-5 w-5 animate-spin text-blue-600" />
+                <Loader2 className="h-5 w-5 animate-spin text-primary" />
               ) : (
                 <ImageIcon className="h-6 w-6 text-slate-500" />
               )}

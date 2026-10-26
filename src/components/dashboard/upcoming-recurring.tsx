@@ -67,7 +67,7 @@ export function UpcomingRecurring() {
           <RefreshCw className="h-4 w-4 text-violet-600" />
           Upcoming Recurring
         </CardTitle>
-        <Link href="/recurring" className="text-xs text-blue-600 hover:text-blue-700 dark:text-blue-400 flex items-center gap-1 hover:gap-2 transition-all">
+        <Link href="/recurring" className="text-xs text-primary hover:text-[#1e4d3f] dark:text-secondary flex items-center gap-1 hover:gap-2 transition-all">
           Manage <ArrowRight className="h-3 w-3" />
         </Link>
       </CardHeader>

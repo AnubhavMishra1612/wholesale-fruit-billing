@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { prisma } from "@/lib/prisma";
+import type { InvoiceStatus } from "@prisma/client";
 import { auth } from "@/lib/auth";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import {
@@ -25,6 +26,7 @@ import {
 import { EditClientButton } from "@/components/clients/edit-client-button";
 import { DownloadStatementButton } from "@/components/clients/download-statement-button";
 import { PortalLinkSection } from "@/components/clients/portal-link-section";
+import { ClientFruitPricesCard } from "@/components/clients/client-fruit-prices-card";
 
 export const revalidate = 10;
 
@@ -44,12 +46,16 @@ async function getClient(userId: string, id: string) {
   }
 }
 
-function StatusBadge({ status }: { status: "DRAFT" | "PENDING" | "PAID" | "VOID" }) {
-  const config = {
-    DRAFT: { variant: "draft" as const, label: "Draft", icon: Clock },
-    PENDING: { variant: "warning" as const, label: "Pending", icon: Clock },
-    PAID: { variant: "success" as const, label: "Paid", icon: CheckCircle2 },
-    VOID: { variant: "neutral" as const, label: "Void", icon: Ban },
+function StatusBadge({ status }: { status: InvoiceStatus }) {
+  const config: Record<
+    InvoiceStatus,
+    { variant: "draft" | "warning" | "success" | "neutral"; label: string; icon: typeof Clock }
+  > = {
+    DRAFT: { variant: "draft", label: "Draft", icon: Clock },
+    PENDING: { variant: "warning", label: "Pending", icon: Clock },
+    PARTIALLY_PAID: { variant: "warning", label: "Partially Paid", icon: Clock },
+    PAID: { variant: "success", label: "Paid", icon: CheckCircle2 },
+    VOID: { variant: "neutral", label: "Void", icon: Ban },
   };
   const { variant, label, icon: Icon } = config[status];
   return (
@@ -112,7 +118,7 @@ export default async function ClientDetailPage({
           </Button>
         </Link>
         <div className="flex items-center gap-4 flex-1">
-          <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center text-white font-bold text-xl shadow-lg shadow-blue-500/25">
+          <div className="h-14 w-14 rounded-2xl bg-primary text-secondary flex items-center justify-center font-bold text-xl shadow-md shadow-primary/20">
             {initials}
           </div>
           <div className="flex-1">
@@ -124,7 +130,7 @@ export default async function ClientDetailPage({
           <EditClientButton client={client} />
           <DownloadStatementButton clientId={client.id} clientName={client.name} />
           <Link href={`/invoices/new?clientId=${client.id}`}>
-            <Button className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-lg shadow-blue-500/25">
+            <Button className="bg-primary hover:bg-[#1e4d3f] text-primary-foreground shadow-md shadow-primary/20">
               <Plus className="h-4 w-4 mr-2" /> New Invoice
             </Button>
           </Link>
@@ -137,17 +143,17 @@ export default async function ClientDetailPage({
         <Card className="border-slate-200/60 dark:border-slate-800/60">
           <CardHeader className="border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 rounded-t-xl">
             <CardTitle className="text-base flex items-center gap-2">
-              <FileText className="h-4 w-4 text-blue-600" /> Contact Info
+              <FileText className="h-4 w-4 text-primary" /> Contact Info
             </CardTitle>
           </CardHeader>
           <CardContent className="pt-6 space-y-4">
             <div className="flex items-start gap-3">
-              <div className="h-9 w-9 rounded-lg bg-blue-50 dark:bg-blue-950/40 flex items-center justify-center shrink-0">
-                <Mail className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+              <div className="h-9 w-9 rounded-lg bg-secondary text-primary dark:bg-primary/30 dark:text-secondary flex items-center justify-center shrink-0">
+                <Mail className="h-4 w-4 text-primary dark:text-secondary" />
               </div>
               <div>
                 <p className="text-xs text-slate-500 dark:text-slate-400 font-medium uppercase tracking-wide">Email</p>
-                <a href={`mailto:${client.email}`} className="text-sm font-medium text-blue-600 dark:text-blue-400 hover:underline">
+                <a href={`mailto:${client.email}`} className="text-sm font-medium text-primary dark:text-secondary hover:underline">
                   {client.email}
                 </a>
               </div>
@@ -160,7 +166,7 @@ export default async function ClientDetailPage({
                 </div>
                 <div>
                   <p className="text-xs text-slate-500 dark:text-slate-400 font-medium uppercase tracking-wide">Phone</p>
-                  <a href={`tel:${client.phone}`} className="text-sm font-medium text-slate-900 dark:text-white hover:text-blue-600 dark:hover:text-blue-400 transition-colors">
+                  <a href={`tel:${client.phone}`} className="text-sm font-medium text-slate-900 dark:text-white hover:text-primary dark:hover:text-secondary transition-colors">
                     {client.phone}
                   </a>
                 </div>
@@ -191,8 +197,8 @@ export default async function ClientDetailPage({
 
             {(client as unknown as { dueDays?: number | null }).dueDays != null && (
               <div className="flex items-start gap-3">
-                <div className="h-9 w-9 rounded-lg bg-indigo-50 dark:bg-indigo-950/40 flex items-center justify-center shrink-0">
-                  <CalendarClock className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
+                <div className="h-9 w-9 rounded-lg bg-secondary dark:bg-primary/40 flex items-center justify-center shrink-0">
+                  <CalendarClock className="h-4 w-4 text-primary dark:text-secondary" />
                 </div>
                 <div>
                   <p className="text-xs text-slate-500 dark:text-slate-400 font-medium uppercase tracking-wide">Payment Terms</p>
@@ -227,14 +233,14 @@ export default async function ClientDetailPage({
               </div>
             </div>
 
-            <div className="p-4 rounded-xl bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/40 dark:to-indigo-950/40 border border-blue-100 dark:border-blue-900/40 mt-2">
-              <p className="text-xs text-blue-700 dark:text-blue-400 font-semibold uppercase tracking-wide mb-1">Total Billed</p>
+            <div className="p-4 rounded-xl bg-gradient-to-r from-secondary/50 to-muted dark:from-primary/30 dark:to-card border border-border mt-2">
+              <p className="text-xs text-primary dark:text-secondary font-semibold uppercase tracking-wide mb-1">Total Billed</p>
               <p className="text-2xl font-bold text-slate-900 dark:text-white tabular-nums">{formatCurrency(totalBilled)}</p>
               <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">{client.invoices.length} total invoices</p>
             </div>
 
             <Link href={`/invoices/new?clientId=${client.id}`} className="block">
-              <Button className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-lg shadow-blue-500/25 mt-2">
+              <Button className="w-full bg-primary hover:bg-[#1e4d3f] text-primary-foreground shadow-md shadow-primary/20 mt-2">
                 <Plus className="h-4 w-4 mr-2" /> New Invoice for {client.name.split(" ")[0]}
               </Button>
             </Link>
@@ -316,7 +322,7 @@ export default async function ClientDetailPage({
           <Card className="border-slate-200/60 dark:border-slate-800/60">
             <CardContent className="p-4">
               <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400 flex items-center gap-1">
-                <TrendingUp className="h-3 w-3 text-blue-500" /> Avg Invoice
+                <TrendingUp className="h-3 w-3 text-primary" /> Avg Invoice
               </p>
               <p className="text-base font-bold text-slate-900 dark:text-white mt-1 tabular-nums">
                 {client.invoices.length > 0 ? formatCurrency(totalBilled / client.invoices.length) : "—"}
@@ -326,10 +332,12 @@ export default async function ClientDetailPage({
           </Card>
         </div>
 
+        <ClientFruitPricesCard clientId={client.id} clientName={client.name} />
+
         <Card className="lg:col-span-2 border-slate-200/60 dark:border-slate-800/60 overflow-hidden">
           <CardHeader className="border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30 rounded-t-none">
             <CardTitle className="text-base flex items-center gap-2">
-              <FileText className="h-4 w-4 text-blue-600" />
+              <FileText className="h-4 w-4 text-primary" />
               Invoice History ({client.invoices.length})
             </CardTitle>
           </CardHeader>
@@ -358,7 +366,7 @@ export default async function ClientDetailPage({
                         <td className="px-6 py-4">
                           <Link
                             href={`/invoices/${inv.id}`}
-                            className="text-blue-600 dark:text-blue-400 font-semibold font-mono hover:underline group-hover:text-blue-700 dark:group-hover:text-blue-300"
+                            className="text-primary dark:text-secondary font-semibold font-mono hover:underline group-hover:text-primary/80"
                           >
                             {inv.invoiceNumber}
                           </Link>

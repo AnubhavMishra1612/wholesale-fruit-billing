@@ -130,7 +130,7 @@ export function KeyboardShortcuts() {
       <Card className="w-full max-w-md mx-4 shadow-2xl" onClick={(e) => e.stopPropagation()}>
         <CardContent className="p-6">
           <h3 className="text-lg font-bold mb-4 flex items-center gap-2">
-            <Keyboard className="h-5 w-5 text-blue-600" /> Keyboard Shortcuts
+            <Keyboard className="h-5 w-5 text-primary" /> Keyboard Shortcuts
           </h3>
           <div className="space-y-2 text-sm">
             {[

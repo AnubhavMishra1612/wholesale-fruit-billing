@@ -35,7 +35,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { formatCurrency, formatDate, isInvoiceOverdue, dueLabel } from "@/lib/utils";
 import { downloadInvoicesCSV, type InvoiceForExport } from "@/lib/export-csv";
 import { PageTransition } from "@/components/page-transition";
-import type { InvoiceWithRelations } from "@/types";
+import type { InvoiceWithRelations, InvoiceStatus } from "@/types";
 
 interface StatusCounts {
   all: number;
@@ -71,16 +71,20 @@ const STATUS_TABS = [
 type StatusFilter = (typeof STATUS_TABS)[number]["value"];
 const PAGE_SIZE = 10;
 
-function StatusBadge({ status, dueDate }: { status: "DRAFT" | "PENDING" | "PAID" | "VOID"; dueDate?: Date | string }) {
+function StatusBadge({ status, dueDate }: { status: InvoiceStatus; dueDate?: Date | string }) {
   if (status === "PENDING" && dueDate && isInvoiceOverdue({ status, dueDate })) {
     const info = dueLabel({ status, dueDate });
     return <Badge variant="danger">{info.label}</Badge>;
   }
-  const config = {
-    DRAFT: { variant: "draft" as const, label: "Draft" },
-    PENDING: { variant: "warning" as const, label: "Pending" },
-    PAID: { variant: "success" as const, label: "Paid" },
-    VOID: { variant: "neutral" as const, label: "Void" },
+  const config: Record<
+    InvoiceStatus,
+    { variant: "draft" | "warning" | "success" | "neutral"; label: string }
+  > = {
+    DRAFT: { variant: "draft", label: "Draft" },
+    PENDING: { variant: "warning", label: "Pending" },
+    PARTIALLY_PAID: { variant: "warning", label: "Partially Paid" },
+    PAID: { variant: "success", label: "Paid" },
+    VOID: { variant: "neutral", label: "Void" },
   };
   const { variant, label } = config[status];
   return <Badge variant={variant}>{label}</Badge>;
@@ -291,7 +295,7 @@ function InvoicesList() {
             Export CSV
           </Button>
           <Link href="/invoices/new">
-            <Button className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-lg shadow-blue-500/25">
+            <Button className="bg-primary hover:bg-[#1e4d3f] text-primary-foreground shadow-md shadow-primary/20">
               <Plus className="h-4 w-4 mr-2" />
               New Invoice
             </Button>
@@ -396,16 +400,16 @@ function InvoicesList() {
           ) : (
             <>
               {someSelected && (
-                <div className="sticky top-0 z-10 bg-blue-50 dark:bg-blue-950/40 border-b border-blue-200 dark:border-blue-900 px-4 py-2.5 flex items-center justify-between gap-3 flex-wrap no-print">
+                <div className="sticky top-0 z-10 bg-secondary/40 dark:bg-primary/20 border-b border-border px-4 py-2.5 flex items-center justify-between gap-3 flex-wrap no-print">
                   <div className="flex items-center gap-2 text-sm">
-                    <CheckCheck className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-                    <span className="font-semibold text-blue-900 dark:text-blue-200">
+                    <CheckCheck className="h-4 w-4 text-primary dark:text-secondary" />
+                    <span className="font-semibold text-primary dark:text-secondary">
                       {selected.size} invoice{selected.size === 1 ? "" : "s"} selected
                     </span>
                     <button
                       type="button"
                       onClick={clearSelection}
-                      className="ml-1 text-xs text-blue-700 dark:text-blue-300 hover:underline inline-flex items-center gap-1"
+                      className="ml-1 text-xs text-primary dark:text-secondary hover:underline inline-flex items-center gap-1"
                     >
                       <X className="h-3 w-3" /> Clear
                     </button>
@@ -471,7 +475,7 @@ function InvoicesList() {
                         key={inv.id}
                         className={[
                           "group cursor-pointer",
-                          selected.has(inv.id) ? "bg-blue-50/70 dark:bg-blue-950/20" : "",
+                          selected.has(inv.id) ? "bg-secondary/30 dark:bg-primary/20" : "",
                         ].join(" ")}
                         onClick={() => window.location.href = `/invoices/${inv.id}`}
                       >
@@ -485,7 +489,7 @@ function InvoicesList() {
                         <TableCell className="font-medium">
                           <Link
                             href={`/invoices/${inv.id}`}
-                            className="text-blue-600 dark:text-blue-400 font-mono font-semibold hover:text-blue-700 dark:hover:text-blue-300"
+                            className="text-primary dark:text-secondary font-mono font-semibold hover:text-primary/80 dark:hover:text-secondary/80"
                             onClick={(e) => e.stopPropagation()}
                           >
                             {inv.invoiceNumber}
@@ -493,7 +497,7 @@ function InvoicesList() {
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center gap-2.5">
-                            <div className="h-8 w-8 rounded-full bg-gradient-to-br from-blue-100 to-indigo-100 dark:from-blue-900 dark:to-indigo-900 flex items-center justify-center text-xs font-semibold text-blue-700 dark:text-blue-300 shrink-0">
+                            <div className="h-8 w-8 rounded-full bg-secondary text-primary dark:bg-primary/40 dark:text-secondary flex items-center justify-center text-xs font-semibold shrink-0">
                               {inv.client.name.charAt(0).toUpperCase()}
                             </div>
                             <div>
@@ -529,14 +533,14 @@ function InvoicesList() {
                           <div className="flex items-center justify-end gap-1 opacity-60 group-hover:opacity-100 transition-opacity">
                             <Link
                               href={`/invoices/${inv.id}`}
-                              className="inline-flex h-8 w-8 items-center justify-center rounded-md text-slate-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/40 dark:hover:text-blue-400"
+                              className="inline-flex h-8 w-8 items-center justify-center rounded-md text-slate-500 hover:text-primary hover:bg-secondary/40 dark:hover:bg-primary/20 dark:hover:text-secondary"
                               aria-label={`View ${inv.invoiceNumber}`}
                             >
                               <Eye className="h-4 w-4" />
                             </Link>
                             <Link
                               href={`/invoices/${inv.id}/edit`}
-                              className="inline-flex h-8 w-8 items-center justify-center rounded-md text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 dark:hover:text-indigo-400"
+                              className="inline-flex h-8 w-8 items-center justify-center rounded-md text-slate-500 hover:text-primary hover:bg-secondary/40 dark:hover:bg-primary/20 dark:hover:text-secondary"
                               aria-label={`Edit ${inv.invoiceNumber}`}
                             >
                               <Pencil className="h-4 w-4" />

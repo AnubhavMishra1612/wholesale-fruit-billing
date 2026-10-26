@@ -12,7 +12,8 @@
  * profile run.
  */
 import { prisma } from "@/lib/prisma";
-import { calculateInvoiceTotals, generateInvoiceNumber } from "@/lib/utils";
+import { calculateInvoiceTotals } from "@/lib/utils";
+import { allocateNextInvoiceNumber } from "@/lib/invoice-sequencer";
 import { getSiteUrl } from "@/lib/stripe";
 import { sendInvoiceEmail } from "@/lib/send-invoice-email";
 import { logActivity } from "@/lib/activity";
@@ -89,7 +90,7 @@ export async function processDueRecurringProfiles(opts: { userId?: string; maxPr
 }
 
 type FullProfile = RecurringProfile & {
-  items: Array<{ description: string; quantity: number; price: { toNumber: () => number } | number }>;
+  items: Array<{ description: string; quantity: { toNumber: () => number } | number; price: { toNumber: () => number } | number }>;
   client: { id: string; email: string; name: string };
   user: { id: string; email: string; name: string; settings?: { companyName?: string | null; companyEmail?: string | null; companyAddress?: string | null; companyPhone?: string | null; currency?: string } | null };
 };
@@ -101,7 +102,7 @@ export async function generateInvoiceFromProfile(profile: FullProfile, now: Date
   // Compute totals
   const lineItems = profile.items.map((i) => ({
     description: i.description,
-    quantity: i.quantity,
+    quantity: typeof i.quantity === "number" ? i.quantity : i.quantity.toNumber(),
     price: typeof i.price === "number" ? i.price : i.price.toNumber(),
   }));
   const totals = calculateInvoiceTotals(lineItems, Number(profile.taxRate));
@@ -110,29 +111,12 @@ export async function generateInvoiceFromProfile(profile: FullProfile, now: Date
   const dueDate = new Date(now);
   dueDate.setDate(dueDate.getDate() + Number(profile.dueInDays));
 
-  // Count today's existing invoices for this user to get the next sequence.
-  const startOfDay = new Date(now);
-  startOfDay.setHours(0, 0, 0, 0);
-  const endOfDay = new Date(now);
-  endOfDay.setHours(23, 59, 59, 999);
-  const [todayCount, userSettings] = await Promise.all([
-    prisma.invoice.count({
-      where: {
-        userId: profile.userId,
-        createdAt: { gte: startOfDay, lte: endOfDay },
-      },
-    }),
-    prisma.settings.upsert({
-      where: { userId: profile.userId },
-      update: {},
-      create: { userId: profile.userId },
-      select: { invoicePrefix: true, invoiceSeparator: true, invoicePad: true, taxLabel: true },
-    }),
-  ]);
-  const invoiceNumber = generateInvoiceNumber(todayCount, {
-    prefix: userSettings.invoicePrefix,
-    separator: userSettings.invoiceSeparator || "-",
-    pad: Number(userSettings.invoicePad) || 4,
+  // Load user settings for invoice prefix and defaults
+  const userSettings = await prisma.settings.upsert({
+    where: { userId: profile.userId },
+    update: {},
+    create: { userId: profile.userId },
+    select: { invoicePrefix: true, invoiceSeparator: true, invoicePad: true, taxLabel: true },
   });
   const taxLabel = userSettings.taxLabel || "GST";
 
@@ -150,6 +134,12 @@ export async function generateInvoiceFromProfile(profile: FullProfile, now: Date
     if (fresh.nextRunAt.getTime() > now.getTime()) {
       throw new Error("Profile already processed by another worker");
     }
+
+    const invoiceNumber = await allocateNextInvoiceNumber(tx, profile.userId, {
+      prefix: userSettings.invoicePrefix,
+      separator: userSettings.invoiceSeparator || "-",
+      pad: Number(userSettings.invoicePad) || 4,
+    });
 
     const inv = await tx.invoice.create({
       data: {

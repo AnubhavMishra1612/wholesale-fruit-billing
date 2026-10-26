@@ -5,7 +5,7 @@
  */
 import { prisma } from "@/lib/prisma";
 
-export const DEFAULT_BRAND_COLOR = "#2563eb";
+export const DEFAULT_BRAND_COLOR = "#173D32";
 export const MAX_LOGO_PDF_HEIGHT = 56; // points (1 point ≈ 1.33 px)
 export const MAX_LOGO_PDF_WIDTH = 170;
 
