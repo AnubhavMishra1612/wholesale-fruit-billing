@@ -352,10 +352,36 @@ export function InvoiceForm({
     [clientId, issueDate]
   );
 
-  // Line item actions
+  const firstFruitSelectRef = useRef<HTMLSelectElement | null>(null);
+  const shouldFocusNewRowRef = useRef(false);
+
+  // Line item actions: insert new row at index 0 (top of the list)
   function addItem() {
-    setItems((prev) => [...prev, emptyItem()]);
+    shouldFocusNewRowRef.current = true;
+    setItems((prev) => [emptyItem(), ...prev]);
+    setErrors((prev) => {
+      const next = { ...prev };
+      Object.keys(next).forEach((k) => {
+        if (k.startsWith("items.")) delete next[k];
+      });
+      return next;
+    });
   }
+
+  // Automatically focus and smoothly scroll new first row into view
+  useEffect(() => {
+    if (shouldFocusNewRowRef.current) {
+      shouldFocusNewRowRef.current = false;
+      if (firstFruitSelectRef.current) {
+        firstFruitSelectRef.current.focus({ preventScroll: true });
+        firstFruitSelectRef.current.scrollIntoView({
+          behavior: "smooth",
+          block: "nearest",
+          inline: "nearest",
+        });
+      }
+    }
+  }, [items]);
 
   function removeItem(id: string) {
     if (items.length <= 1) return;
@@ -645,7 +671,7 @@ export function InvoiceForm({
   const backHref = isEdit && invoice ? `/invoices/${invoice.id}` : "/invoices";
 
   return (
-    <form onSubmit={handleSubmit} className="grid gap-6 lg:grid-cols-3">
+    <form noValidate onSubmit={handleSubmit} className="grid gap-6 lg:grid-cols-3">
       <div className="lg:col-span-2 space-y-6">
         {/* Header card */}
         <div className="flex items-center justify-between no-print">
@@ -966,10 +992,12 @@ export function InvoiceForm({
                       </span>
                       {/* Fruit Selector */}
                       <select
+                        ref={idx === 0 ? firstFruitSelectRef : undefined}
+                        id={`fruit-select-${item.id}`}
                         aria-label={`Fruit for item ${idx + 1}`}
                         value={item.fruitId ?? ""}
                         onChange={(e) => handleFruitSelect(item.id, e.target.value)}
-                        className="h-9 rounded-md border border-border bg-card dark:text-foreground px-2.5 text-sm font-medium focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                        className="h-9 rounded-md border border-border bg-card dark:text-foreground px-2.5 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#173D32] dark:focus-visible:ring-[#DCEFE3]"
                       >
                         <option value="">-- Select Fruit from Catalogue --</option>
                         {fruits.map((f) => (
@@ -1092,8 +1120,8 @@ export function InvoiceForm({
                       </div>
                       <Input
                         type="number"
-                        min="0.001"
-                        step="0.001"
+                        min="0"
+                        step="1"
                         placeholder="1.000"
                         value={item.quantity}
                         onChange={(e) => updateItem(item.id, "quantity", e.target.value)}

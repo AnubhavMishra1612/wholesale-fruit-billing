@@ -1,14 +1,16 @@
 /**
- * Server-side PDF rendering helpers.
+ * Server-side PDF rendering helpers — Authoritative Invoice PDF Generator.
  *
- * We lazy-import @react-pdf/renderer + React here (and only from API
- * routes) so the heavy PDF stack isn't pulled into the client bundle or
- * into unrelated SSR pages. On Next 16 Turbopack this avoids native-module
- * resolution hiccups similar to what we hit with argon2.
+ * Employs a single canonical invoice view model so the PDF layout, typography,
+ * currency symbols, and label alignment represent the authoritative invoice design.
  */
 import { prisma } from "@/lib/prisma";
 import { getBrandingForUser, darken, DEFAULT_BRAND_COLOR } from "@/lib/branding";
 import type { InvoiceWithRelations } from "@/types";
+import {
+  buildCanonicalInvoiceViewModel,
+  CanonicalInvoiceViewModel,
+} from "@/lib/invoice-formatter";
 
 export interface PdfSettings {
   companyName: string;
@@ -16,12 +18,10 @@ export interface PdfSettings {
   companyAddress?: string | null;
   companyPhone?: string | null;
   currency: string;
-  // Optional company logo: base64 (without data: prefix) + MIME type. When
-  // present we render an <Image> in the header; when absent we fall back
-  // to the initial-letter badge.
   logoBase64?: string | null;
   logoContentType?: string | null;
-  brandColor?: string; // hex accent (default DEFAULT_BRAND_COLOR)
+  logoUrl?: string | null;
+  brandColor?: string;
 }
 
 export interface InvoicePdfData {
@@ -32,11 +32,6 @@ export interface InvoicePdfData {
 
 /**
  * Resolve an invoice + the settings to render on its PDF.
- *
- * When `userId` is supplied (authenticated, admin download) we require
- * ownership. When it's omitted (public download link) we simply look up by
- * id — the invoice id itself is a non-guessable CUID and access is rate
- * limited at the route level.
  */
 export async function loadInvoiceForPdf(
   invoiceId: string,
@@ -66,7 +61,6 @@ export async function loadInvoiceForPdf(
   const companyName = settings?.companyName || "Your Business Name";
   const companyEmail = settings?.companyEmail || "billing@example.com";
 
-  // Pull branding (logo + accent color).
   const branding = await getBrandingForUser(invoice.userId);
 
   return {
@@ -79,6 +73,7 @@ export async function loadInvoiceForPdf(
       currency,
       logoBase64: branding.logoData,
       logoContentType: branding.logoContentType,
+      logoUrl: branding.logoDataUri || branding.logoUrl,
       brandColor: branding.brandColor,
     },
     filename: buildPdfFilename(invoice.invoiceNumber),
@@ -86,12 +81,10 @@ export async function loadInvoiceForPdf(
 }
 
 export function buildPdfFilename(invoiceNumber: string): string {
-  // Filesystem-safe: INV-20250728-0001 -> Invoice_INV-20250728-0001.pdf
   const safe = invoiceNumber.replace(/[^\w.-]+/g, "_");
   return `Invoice_${safe}.pdf`;
 }
 
-// Lazily loaded caches — populated on first render.
 type PdfLib = {
   renderToBuffer: (el: React.ReactElement) => Promise<Buffer>;
   Document: React.ComponentType<Record<string, unknown>>;
@@ -113,16 +106,12 @@ async function loadPdfDeps(): Promise<{ React: typeof import("react"); pdfLib: P
   const reactMod = await import("react");
   const R = (reactMod.default ?? reactMod) as unknown as typeof import("react");
   const pdfMod = (await import("@react-pdf/renderer")) as unknown as Record<string, unknown>;
-  // @react-pdf/renderer has both a `default` export (browser primitives only)
-  // AND named exports (renderToBuffer, pdf, etc.). We want the named exports
-  // since they include renderToBuffer. Fall back to default only if the named
-  // export set is missing renderToBuffer.
+
   const hasNamed = typeof pdfMod.renderToBuffer === "function";
   const candidate = (hasNamed ? pdfMod : (pdfMod.default ?? pdfMod)) as Record<string, unknown>;
   _React = R;
   _pdfLib = candidate as unknown as PdfLib;
-  // NOTE: Noto Sans font registration is attempted but best-effort; failures
-  // are caught and logged so the PDF still renders with Helvetica fallback.
+
   try {
     const { registerPdfFonts } = await import("@/lib/pdf-fonts");
     const Font = (candidate as unknown as { Font?: { register: (opts: unknown) => void } }).Font;
@@ -134,11 +123,7 @@ async function loadPdfDeps(): Promise<{ React: typeof import("react"); pdfLib: P
 }
 
 /**
- * Render the invoice React tree to a PDF Buffer.
- *
- * Uses a dynamic ESM import of @react-pdf/renderer so the heavy PDF stack
- * (pdfkit, fontkit, etc.) is never pulled into the client bundle or into
- * unrelated SSR pages. The imports are cached in-memory across requests.
+ * Render the canonical invoice React tree to an authoritative PDF Buffer.
  */
 export async function renderInvoicePdfToBuffer(
   data: InvoicePdfData
@@ -147,21 +132,22 @@ export async function renderInvoicePdfToBuffer(
   const { Document, Page, View, Text, Link, Image, StyleSheet, renderToBuffer } = pdfLib;
   const { invoice, settings } = data;
 
-  // Resolve brand color (with safe default) and derived shades.
-  const rawBrand = settings.brandColor;
+  const vm: CanonicalInvoiceViewModel = buildCanonicalInvoiceViewModel(invoice, settings);
+
+  const rawBrand = vm.brandColor;
   const brand = rawBrand && typeof rawBrand === "string" && /^#([0-9a-fA-F]{3}){1,2}$/.test(rawBrand)
     ? (rawBrand.length === 4
         ? `#${rawBrand[1]}${rawBrand[1]}${rawBrand[2]}${rawBrand[2]}${rawBrand[3]}${rawBrand[3]}`
         : rawBrand.toLowerCase())
     : DEFAULT_BRAND_COLOR;
   const brandDark = darken(brand, 0.22);
-  // Build a soft tint of the brand for the "Bill To" card (light bg).
+
   const brandTint = (() => {
     const h = brand.replace("#", "");
     const r = parseInt(h.slice(0, 2), 16);
     const g = parseInt(h.slice(2, 4), 16);
     const b = parseInt(h.slice(4, 6), 16);
-    const mix = (c: number) => Math.round(c + (255 - c) * 0.92);
+    const mix = (c: number) => Math.round(c + (255 - c) * 0.94);
     return `#${[mix(r), mix(g), mix(b)].map((v) => v.toString(16).padStart(2, "0")).join("")}`;
   })();
 
@@ -170,12 +156,13 @@ export async function renderInvoicePdfToBuffer(
     primaryDark: brandDark,
     primarySoft: brandTint,
     text: "#0f172a",
+    textSub: "#334155",
     muted: "#64748b",
     border: "#e2e8f0",
     bgSoft: "#f8fafc",
     paid: "#dcfce7",
     paidText: "#15803d",
-    warning: "#d97706",
+    warning: "#b45309",
     warningBg: "#fef3c7",
     warningBorder: "#fcd34d",
     overdueBg: "#fee2e2",
@@ -186,240 +173,523 @@ export async function renderInvoicePdfToBuffer(
 
   const styles = StyleSheet.create({
     page: {
-      padding: "40 48 56 48",
-      fontFamily: "Helvetica",
+      padding: "36 44 75 44",
+      fontFamily: "NotoSans",
       color: palette.text,
-      fontSize: 10,
-      lineHeight: 1.45,
+      fontSize: 9.5,
+      lineHeight: 1.4,
+      backgroundColor: "#ffffff",
     },
     accentBar: {
       position: "absolute",
       top: 0,
       left: 0,
       right: 0,
-      height: 6,
+      height: 5,
       backgroundColor: palette.primary,
     },
-    header: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 28 },
-    brand: { flexDirection: "row", alignItems: "center", gap: 10 },
-    brandMark: { width: 38, height: 38, borderRadius: 8, backgroundColor: palette.primary, alignItems: "center", justifyContent: "center" },
-    brandMarkText: { color: "white", fontSize: 16, fontWeight: "bold" },
-    brandTitle: { fontSize: 20, fontWeight: "bold", color: palette.text },
-    brandSub: { fontSize: 9, color: palette.muted, fontFamily: "Courier", marginTop: 2 },
-    rightBlock: { alignItems: "flex-end" },
-    statusRow: { flexDirection: "row", justifyContent: "flex-end", marginBottom: 4 },
-    statusPill: { paddingHorizontal: 10, paddingVertical: 3, borderRadius: 10, fontSize: 8, fontWeight: "bold", textTransform: "uppercase", letterSpacing: 0.6 },
-    invoiceTitle: { fontSize: 26, fontWeight: "bold", color: palette.primaryDark, letterSpacing: 1 },
-    invoiceNumber: { fontSize: 10, color: palette.muted, fontFamily: "Courier", marginTop: 2 },
-    amountDueLabel: { fontSize: 8, color: palette.muted, textTransform: "uppercase", letterSpacing: 0.8, marginTop: 10, textAlign: "right" },
-    amountDue: { fontSize: 18, fontWeight: "bold", color: palette.primary, marginTop: 2 },
+    header: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "flex-start",
+      marginBottom: 18,
+      paddingBottom: 16,
+      borderBottomWidth: 1,
+      borderBottomColor: palette.border,
+    },
+    brandLeft: {
+      flexDirection: "row",
+      alignItems: "flex-start",
+      gap: 12,
+      maxWidth: "56%",
+    },
+    brandMark: {
+      width: 42,
+      height: 42,
+      borderRadius: 6,
+      backgroundColor: palette.primary,
+      alignItems: "center",
+      justifyContent: "center",
+      marginTop: 2,
+    },
+    brandMarkText: {
+      color: "white",
+      fontSize: 18,
+      fontWeight: "bold",
+      lineHeight: 1.2,
+    },
+    brandLogo: {
+      maxHeight: 52,
+      maxWidth: 160,
+      objectFit: "contain" as const,
+    },
+    companyDetails: {
+      flexDirection: "column",
+      justifyContent: "flex-start",
+    },
+    companyTitle: {
+      fontSize: 15,
+      fontWeight: "bold",
+      color: palette.text,
+      lineHeight: 1.25,
+      marginBottom: 3,
+    },
+    companyLine: {
+      fontSize: 8.5,
+      lineHeight: 1.35,
+      color: palette.textSub,
+      marginTop: 1,
+    },
+    companyLink: {
+      fontSize: 8.5,
+      lineHeight: 1.35,
+      color: palette.primary,
+      textDecoration: "none",
+      marginTop: 1,
+    },
+    headerRight: {
+      flexDirection: "column",
+      alignItems: "flex-end",
+      justifyContent: "flex-start",
+      minWidth: 160,
+      maxWidth: "42%",
+      textAlign: "right",
+    },
+    invoiceTitle: {
+      fontSize: 22,
+      lineHeight: 1.15,
+      fontWeight: "bold",
+      color: palette.primaryDark,
+      textAlign: "right",
+      marginBottom: 3,
+    },
+    invoiceNumber: {
+      fontSize: 10,
+      lineHeight: 1.25,
+      fontWeight: "bold",
+      color: palette.textSub,
+      textAlign: "right",
+      marginBottom: 6,
+    },
+    statusRow: {
+      flexDirection: "row",
+      justifyContent: "flex-end",
+      marginBottom: 8,
+    },
+    statusPill: {
+      paddingHorizontal: 8,
+      paddingVertical: 2.5,
+      borderRadius: 4,
+      fontSize: 8,
+      fontWeight: "bold",
+      textTransform: "uppercase",
+      lineHeight: 1.2,
+    },
+    amountDueBlock: {
+      alignItems: "flex-end",
+    },
+    amountDueLabel: {
+      fontSize: 7.5,
+      lineHeight: 1.2,
+      color: palette.muted,
+      textTransform: "uppercase",
+      fontWeight: "bold",
+      textAlign: "right",
+    },
+    amountDue: {
+      fontSize: 16,
+      lineHeight: 1.25,
+      fontWeight: "bold",
+      color: palette.primary,
+      textAlign: "right",
+      marginTop: 2,
+    },
 
-    parties: { flexDirection: "row", gap: 12, marginBottom: 20 },
-    partyCard: { flex: 1, padding: 12, borderRadius: 6, backgroundColor: palette.bgSoft, borderWidth: 1, borderColor: palette.border },
-    partyCardBillTo: { backgroundColor: brandTint, borderColor: brand },
-    partyLabel: { fontSize: 8, color: palette.muted, textTransform: "uppercase", letterSpacing: 0.8, fontWeight: "bold", marginBottom: 6 },
-    partyLabelBillTo: { color: brandDark },
-    partyName: { fontSize: 12, fontWeight: "bold", marginBottom: 3 },
-    partyLine: { fontSize: 9, color: "#475569", marginBottom: 1.5 },
-    partyLink: { fontSize: 9, color: palette.primary, textDecoration: "none", marginBottom: 1.5 },
+    // Parties
+    parties: {
+      flexDirection: "row",
+      gap: 12,
+      marginBottom: 14,
+    },
+    partyCard: {
+      flex: 1,
+      padding: 10,
+      borderRadius: 5,
+      backgroundColor: palette.bgSoft,
+      borderWidth: 1,
+      borderColor: palette.border,
+    },
+    partyCardBillTo: {
+      backgroundColor: palette.primarySoft,
+      borderColor: palette.primary,
+    },
+    partyLabel: {
+      fontSize: 8,
+      color: palette.muted,
+      textTransform: "uppercase",
+      fontWeight: "bold",
+      marginBottom: 4,
+    },
+    partyLabelBillTo: {
+      color: palette.primaryDark,
+    },
+    partyName: {
+      fontSize: 11,
+      fontWeight: "bold",
+      marginBottom: 2,
+    },
+    partyLine: {
+      fontSize: 8.5,
+      color: palette.textSub,
+      marginBottom: 1,
+    },
+    partyLink: {
+      fontSize: 8.5,
+      color: palette.primary,
+      textDecoration: "none",
+      marginBottom: 1,
+    },
 
-    meta: { flexDirection: "row", backgroundColor: palette.bgSoft, borderRadius: 6, padding: 12, marginBottom: 16, borderWidth: 1, borderColor: palette.border },
-    metaCell: { flex: 1, paddingHorizontal: 6, borderRightWidth: 1, borderRightColor: palette.border },
-    metaCellLast: { flex: 1, paddingHorizontal: 6 },
-    metaLabel: { fontSize: 8, color: palette.muted, textTransform: "uppercase", letterSpacing: 0.8, fontWeight: "bold", marginBottom: 3 },
-    metaValue: { fontSize: 10, fontWeight: "bold" },
+    // Meta row: Dates + GST
+    meta: {
+      flexDirection: "row",
+      backgroundColor: palette.bgSoft,
+      borderRadius: 5,
+      padding: 8,
+      marginBottom: 14,
+      borderWidth: 1,
+      borderColor: palette.border,
+    },
+    metaCell: {
+      flex: 1,
+      paddingHorizontal: 6,
+      borderRightWidth: 1,
+      borderRightColor: palette.border,
+    },
+    metaCellLast: {
+      flex: 1,
+      paddingHorizontal: 6,
+    },
+    metaLabel: {
+      fontSize: 7.5,
+      color: palette.muted,
+      textTransform: "uppercase",
+      fontWeight: "bold",
+      marginBottom: 2,
+    },
+    metaValue: {
+      fontSize: 9.5,
+      fontWeight: "bold",
+      color: palette.text,
+    },
 
-    table: { borderWidth: 1, borderColor: palette.border, borderRadius: 6, overflow: "hidden", marginBottom: 14 },
-    tableHeader: { flexDirection: "row", backgroundColor: palette.bgSoft, borderBottomWidth: 1, borderBottomColor: palette.border, paddingVertical: 7, paddingHorizontal: 10 },
-    tableHeaderCell: { fontSize: 8, color: palette.muted, textTransform: "uppercase", letterSpacing: 0.7, fontWeight: "bold" },
-    tableRow: { flexDirection: "row", paddingVertical: 8, paddingHorizontal: 10, borderBottomWidth: 1, borderBottomColor: palette.border },
-    tableRowLast: { flexDirection: "row", paddingVertical: 8, paddingHorizontal: 10 },
-    colIdx: { width: "6%" },
-    colDesc: { width: "52%" },
-    colQty: { width: "12%", textAlign: "right" },
-    colPrice: { width: "15%", textAlign: "right" },
-    colAmount: { width: "15%", textAlign: "right" },
-    idxCell: { fontSize: 9, color: palette.muted, fontFamily: "Courier" },
-    descCell: { fontSize: 10 },
-    numCell: { fontSize: 10, fontFamily: "Courier" },
-    numCellBold: { fontSize: 10, fontFamily: "Courier", fontWeight: "bold" },
+    // Table
+    table: {
+      borderWidth: 1,
+      borderColor: palette.border,
+      borderRadius: 5,
+      marginBottom: 12,
+    },
+    tableHeader: {
+      flexDirection: "row",
+      backgroundColor: palette.bgSoft,
+      borderBottomWidth: 1,
+      borderBottomColor: palette.border,
+      paddingVertical: 6,
+      paddingHorizontal: 8,
+    },
+    tableHeaderCell: {
+      fontSize: 8,
+      color: palette.muted,
+      textTransform: "uppercase",
+      fontWeight: "bold",
+    },
+    tableHeaderCellCenter: {
+      fontSize: 8,
+      color: palette.muted,
+      textTransform: "uppercase",
+      fontWeight: "bold",
+      textAlign: "center",
+    },
+    tableHeaderCellRight: {
+      fontSize: 8,
+      color: palette.muted,
+      textTransform: "uppercase",
+      fontWeight: "bold",
+      textAlign: "right",
+    },
+    tableRow: {
+      flexDirection: "row",
+      paddingVertical: 6,
+      paddingHorizontal: 8,
+      borderBottomWidth: 1,
+      borderBottomColor: palette.border,
+      alignItems: "center",
+    },
+    tableRowLast: {
+      flexDirection: "row",
+      paddingVertical: 6,
+      paddingHorizontal: 8,
+      alignItems: "center",
+    },
+    colIdx: { width: "5%" },
+    colDesc: { width: "45%" },
+    colQty: { width: "12%" },
+    colUnit: { width: "10%" },
+    colPrice: { width: "14%" },
+    colAmount: { width: "14%" },
+    idxCell: { fontSize: 8.5, color: palette.muted },
+    descCell: { fontSize: 9, color: palette.text },
+    unitCell: { fontSize: 8.5, textAlign: "center", color: palette.textSub },
+    numCell: { fontSize: 9, textAlign: "right", color: palette.text },
+    numCellBold: { fontSize: 9, fontWeight: "bold", textAlign: "right", color: palette.text },
 
-    totalsWrap: { flexDirection: "row", justifyContent: "flex-end", marginBottom: 16 },
-    totalsBox: { width: "52%", padding: 14, backgroundColor: palette.bgSoft, borderRadius: 6, borderWidth: 1, borderColor: palette.border },
-    totalRow: { flexDirection: "row", justifyContent: "space-between", marginBottom: 6 },
-    totalRowLast: { flexDirection: "row", justifyContent: "space-between", paddingTop: 8, marginTop: 4, borderTopWidth: 1, borderTopColor: palette.border },
-    totalLabel: { fontSize: 10, color: palette.muted },
-    totalLabelBig: { fontSize: 12, fontWeight: "bold", color: palette.text },
-    totalValue: { fontSize: 10, fontFamily: "Courier", fontWeight: "bold" },
-    totalValueBig: { fontSize: 16, fontFamily: "Courier", fontWeight: "bold", color: palette.primary },
+    // Totals
+    totalsWrap: {
+      flexDirection: "row",
+      justifyContent: "flex-end",
+      marginBottom: 12,
+    },
+    totalsBox: {
+      width: "50%",
+      padding: 10,
+      backgroundColor: palette.bgSoft,
+      borderRadius: 5,
+      borderWidth: 1,
+      borderColor: palette.border,
+    },
+    totalRow: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      marginBottom: 4,
+    },
+    totalRowLast: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      paddingTop: 6,
+      marginTop: 4,
+      borderTopWidth: 1,
+      borderTopColor: palette.border,
+    },
+    totalLabel: {
+      fontSize: 9,
+      color: palette.muted,
+    },
+    totalLabelBig: {
+      fontSize: 11,
+      fontWeight: "bold",
+      color: palette.text,
+    },
+    totalValue: {
+      fontSize: 9,
+      fontWeight: "bold",
+      color: palette.text,
+    },
+    totalValueBig: {
+      fontSize: 14,
+      fontWeight: "bold",
+      color: palette.primary,
+    },
 
-    banner: { padding: 10, borderRadius: 6, marginBottom: 14, borderWidth: 1 },
-    bannerText: { fontSize: 9, fontWeight: "bold" },
-    bannerSub: { fontSize: 8.5, marginTop: 2, color: "#475569" },
-
-    notesCard: { padding: 12, backgroundColor: palette.bgSoft, borderRadius: 6, borderWidth: 1, borderColor: palette.border, marginBottom: 14 },
-    notesLabel: { fontSize: 8, color: palette.muted, textTransform: "uppercase", letterSpacing: 0.8, fontWeight: "bold", marginBottom: 5 },
-    notesText: { fontSize: 9.5, color: "#334155" },
-
-    footer: { position: "absolute", bottom: 30, left: 48, right: 48, textAlign: "center", borderTopWidth: 1, borderTopColor: palette.border, paddingTop: 10 },
-    footerCompany: { fontSize: 9, fontWeight: "bold", color: palette.muted },
-    footerEmail: { fontSize: 8, color: palette.muted, marginTop: 1 },
-    footerThanks: { fontSize: 8.5, color: "#94a3b8", marginTop: 4 },
-    footerMeta: { flexDirection: "row", justifyContent: "space-between", marginTop: 4, fontSize: 7, color: "#cbd5e1", fontFamily: "Courier" },
-    brandLogo: { maxHeight: 56, maxWidth: 170, objectFit: "contain" as const },
+    // Banner & Notes
+    banner: {
+      padding: 8,
+      borderRadius: 5,
+      marginBottom: 10,
+      borderWidth: 1,
+    },
+    bannerText: {
+      fontSize: 8.5,
+      fontWeight: "bold",
+    },
+    bannerSub: {
+      fontSize: 8,
+      marginTop: 1.5,
+      color: palette.textSub,
+    },
+    notesCard: {
+      padding: 10,
+      backgroundColor: palette.bgSoft,
+      borderRadius: 5,
+      borderWidth: 1,
+      borderColor: palette.border,
+      marginBottom: 12,
+    },
+    notesLabel: {
+      fontSize: 7.5,
+      color: palette.muted,
+      textTransform: "uppercase",
+      fontWeight: "bold",
+      marginBottom: 3,
+    },
+    notesText: {
+      fontSize: 8.5,
+      color: palette.textSub,
+    },    // Footer
+    footer: {
+      position: "absolute",
+      bottom: 22,
+      left: 44,
+      right: 44,
+      borderTopWidth: 1,
+      borderTopColor: palette.border,
+      paddingTop: 8,
+    },
+    footerMainRow: {
+      flexDirection: "row",
+      justifyContent: "flex-start",
+      alignItems: "center",
+      marginBottom: 3,
+    },
+    footerThanks: {
+      fontSize: 8.5,
+      fontWeight: "bold",
+      color: palette.textSub,
+      lineHeight: 1.25,
+    },
+    footerPageNum: {
+      position: "absolute",
+      right: 0,
+      top: 8,
+      fontSize: 8,
+      color: palette.muted,
+      textAlign: "right",
+      lineHeight: 1.25,
+    },
+    footerMetaRow: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+    },
+    footerCompany: {
+      fontSize: 7.5,
+      color: palette.muted,
+      lineHeight: 1.25,
+    },
+    footerMeta: {
+      fontSize: 7.5,
+      color: palette.muted,
+      textAlign: "right",
+      lineHeight: 1.25,
+    },
   });
 
-  const currency = settings.currency;
-  const subtotal = Number(invoice.subtotal);
-  // The invoice may carry a discount column (added after initial launch).
-  // Tolerate Decimal/number/null safely.
-  const discVal = (invoice as unknown as { discountAmount?: unknown }).discountAmount;
-  const discountAmount =
-    discVal == null
-      ? 0
-      : typeof discVal === "number"
-        ? discVal
-        : typeof (discVal as { toNumber?: () => number }).toNumber === "function"
-          ? (discVal as { toNumber: () => number }).toNumber()
-          : Number(discVal);
-  const taxRate = Number(invoice.taxRate);
-  const taxLabelInv = (invoice as unknown as { taxLabel?: string | null }).taxLabel;
-  const taxLabel = (taxLabelInv && taxLabelInv.trim() ? taxLabelInv : "GST").toUpperCase();
-  const net = Math.max(0, subtotal - (Number.isFinite(discountAmount) ? discountAmount : 0));
-  const taxAmount = (net * taxRate) / 100;
-  const total = Number(invoice.totalAmount);
-  const issueDate = new Date(invoice.issueDate);
-  const dueDate = new Date(invoice.dueDate);
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const daysOverdue = invoice.status === "PENDING"
-    ? Math.floor((today.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24))
-    : 0;
-  const isOverdue = daysOverdue > 0;
-  const companyInitial = (settings.companyName || "S").charAt(0).toUpperCase();
+  const companyInitial = (vm.seller.name || "S").charAt(0).toUpperCase();
 
-  const fmtMoney = (n: number) => {
-    try {
-      return new Intl.NumberFormat("en-IN", {
-        style: "currency",
-        currency,
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
-      }).format(n);
-    } catch {
-      return `${currency} ${n.toFixed(2)}`;
+  const resolvedLogo = (() => {
+    const raw = (vm.logoBase64 || vm.logoUrl || "").trim();
+    if (!raw) return null;
+    if (raw.startsWith("data:") || raw.startsWith("http://") || raw.startsWith("https://")) {
+      return raw;
     }
-  };
-  const fmtDate = (d: Date) => {
     try {
-      return new Intl.DateTimeFormat("en-IN", {
-        day: "2-digit", month: "short", year: "numeric", timeZone: "Asia/Calcutta",
-      }).format(d);
-    } catch {
-      return d.toDateString();
+      const buf = Buffer.from(raw, "base64");
+      if (buf.length > 8) {
+        const isJpeg = buf[0] === 0xff && buf[1] === 0xd8;
+        return {
+          data: buf,
+          format: (isJpeg ? "jpg" : "png") as "jpg" | "png",
+        };
+      }
+    } catch (e) {
+      console.warn("[pdf] Failed to parse logo base64 buffer:", e);
     }
-  };
+    return null;
+  })();
 
-  // The base statusPill style comes from StyleSheet.create which returns
-  // typed keys only, so we build a plain style object for the status color.
-  const basePill: Record<string, unknown> = {
-    paddingHorizontal: 10,
-    paddingVertical: 3,
-    borderRadius: 10,
+  const statusPillStyle = {
+    paddingHorizontal: 8,
+    paddingVertical: 2.5,
+    borderRadius: 4,
     fontSize: 8,
     fontWeight: "bold",
     textTransform: "uppercase",
-    letterSpacing: 0.6,
+    backgroundColor: vm.statusInfo.theme.badgeBg,
+    color: vm.statusInfo.theme.badgeText,
   };
-  let statusPillStyle: Record<string, unknown> = { ...basePill, backgroundColor: "#e2e8f0", color: "#64748b" };
-  let statusLabel = "Draft";
-  if (invoice.status === "VOID") { statusPillStyle = { ...basePill, backgroundColor: "#e2e8f0", color: "#475569" }; statusLabel = "Void"; }
-  else if (isOverdue) { statusPillStyle = { ...basePill, backgroundColor: palette.overdueBg, color: palette.overdueText }; statusLabel = "Overdue"; }
-  else if (invoice.status === "PAID") { statusPillStyle = { ...basePill, backgroundColor: palette.paid, color: palette.paidText }; statusLabel = "Paid"; }
-  else if (invoice.status === "PENDING") { statusPillStyle = { ...basePill, backgroundColor: palette.warningBg, color: palette.warning }; statusLabel = "Pending"; }
 
   const banner = (() => {
-    if (invoice.status === "PAID") {
+    if (vm.statusInfo.isPaid) {
       return (
-        React.createElement(View, { style: [styles.banner, { backgroundColor: palette.paid, borderColor: "#86efac" }], key: "banner" },
-          React.createElement(Text, { style: [styles.bannerText, { color: palette.paidText }] }, "Payment Received — Thank you for your business!")
+        React.createElement(View, { style: [styles.banner, { backgroundColor: palette.paid, borderColor: "#86efac" }], key: "banner", wrap: false },
+          React.createElement(Text, { style: [styles.bannerText, { color: palette.paidText }] }, "Payment Received — Full payment has been credited to your account.")
         )
       );
     }
-    if (isOverdue) {
+    if (vm.statusInfo.isOverdue) {
       return (
-        React.createElement(View, { style: [styles.banner, { backgroundColor: palette.overdueBg, borderColor: palette.overdueBorder }], key: "banner" },
+        React.createElement(View, { style: [styles.banner, { backgroundColor: palette.overdueBg, borderColor: palette.overdueBorder }], key: "banner", wrap: false },
           React.createElement(Text, { style: [styles.bannerText, { color: palette.overdueText }] },
-            `Payment Overdue — ${daysOverdue} day${daysOverdue !== 1 ? "s" : ""} past due`
+            vm.statusInfo.bannerTitle
           )
         )
       );
     }
-    if (invoice.status === "VOID") {
+    if (vm.statusInfo.isVoid) {
       return (
-        React.createElement(View, { style: [styles.banner, { backgroundColor: "#f1f5f9", borderColor: "#94a3b8" }], key: "banner" },
-          React.createElement(Text, { style: [styles.bannerText, { color: "#475569" }] }, "Void — This invoice has been cancelled and is not payable")
+        React.createElement(View, { style: [styles.banner, { backgroundColor: "#f1f5f9", borderColor: "#94a3b8" }], key: "banner", wrap: false },
+          React.createElement(Text, { style: [styles.bannerText, { color: "#475569" }] }, vm.statusInfo.bannerTitle)
         )
       );
     }
-    if (invoice.status === "PENDING") {
+    if (vm.statusInfo.isPending) {
       return (
-        React.createElement(View, { style: [styles.banner, { backgroundColor: palette.warningBg, borderColor: palette.warningBorder }], key: "banner" },
+        React.createElement(View, { style: [styles.banner, { backgroundColor: palette.warningBg, borderColor: palette.warningBorder }], key: "banner", wrap: false },
           React.createElement(Text, { style: [styles.bannerText, { color: palette.warning }] }, "Payment Pending"),
-          React.createElement(Text, { style: styles.bannerSub }, `Due by ${fmtDate(dueDate)}`)
+          React.createElement(Text, { style: styles.bannerSub }, `Due by ${vm.formattedDueDate}`)
         )
       );
     }
     return (
-      React.createElement(View, { style: [styles.banner, { backgroundColor: palette.draftBg, borderColor: palette.border }], key: "banner" },
+      React.createElement(View, { style: [styles.banner, { backgroundColor: palette.draftBg, borderColor: palette.border }], key: "banner", wrap: false },
         React.createElement(Text, { style: [styles.bannerText, { color: "#64748b" }] }, "Draft — This invoice has not been sent to the client.")
       )
     );
   })();
 
-  const clientPhone = "phone" in invoice.client && typeof (invoice.client as { phone?: unknown }).phone === "string"
-    ? (invoice.client as { phone: string }).phone
-    : null;
-
-  const el = React.createElement(Document, {
-    title: `${invoice.invoiceNumber} - ${settings.companyName}`,
-    author: settings.companyName,
-    subject: `Invoice ${invoice.invoiceNumber} for ${invoice.client.name}`,
-  },
-    React.createElement(Page, { size: "A4", style: styles.page },
+  const doc = React.createElement(
+    Document,
+    {
+      title: `${vm.invoiceNumber} - ${vm.seller.name}`,
+      author: vm.seller.name,
+      subject: `Invoice ${vm.invoiceNumber} for ${vm.customer.name}`,
+    },
+    React.createElement(
+      Page,
+      { size: "A4", style: styles.page },
       React.createElement(View, { style: styles.accentBar, fixed: true }),
 
-      // Header — logo or initial badge + brand name, then invoice title block.
+      // Header
       React.createElement(View, { style: styles.header },
-        React.createElement(View, { style: styles.brand },
-          settings.logoBase64 && settings.logoContentType
+        React.createElement(View, { style: styles.brandLeft },
+          resolvedLogo
             ? React.createElement(Image, {
                 key: "logo",
                 style: styles.brandLogo,
-                src: { data: settings.logoBase64, format: settings.logoContentType === "image/png" ? "png" : settings.logoContentType === "image/webp" ? "png" : "jpg" },
+                src: resolvedLogo,
               })
             : React.createElement(View, { key: "mark", style: styles.brandMark },
                 React.createElement(Text, { style: styles.brandMarkText }, companyInitial)
               ),
-          // When a logo is present we don't repeat "INVOICE" in the brand
-          // block; the right-side AMOUNT DUE title already labels the doc.
-          settings.logoBase64
-            ? null
-            : React.createElement(View, { key: "title" },
-                React.createElement(Text, { style: styles.brandTitle }, "INVOICE"),
-                React.createElement(Text, { style: styles.brandSub }, invoice.invoiceNumber)
-              )
+          React.createElement(View, { style: styles.companyDetails },
+            React.createElement(Text, { style: styles.companyTitle }, vm.seller.name),
+            vm.seller.email ? React.createElement(Link, { src: `mailto:${vm.seller.email}`, style: styles.companyLink }, vm.seller.email) : null,
+            vm.seller.phone ? React.createElement(Text, { style: styles.companyLine }, vm.seller.phone) : null,
+            vm.seller.address ? React.createElement(Text, { style: styles.companyLine }, vm.seller.address) : null
+          )
         ),
-        React.createElement(View, { style: styles.rightBlock },
+        React.createElement(View, { style: styles.headerRight },
+          React.createElement(Text, { style: styles.invoiceTitle }, "INVOICE"),
+          React.createElement(Text, { style: styles.invoiceNumber }, vm.invoiceNumber),
           React.createElement(View, { style: styles.statusRow },
             React.createElement(View, { style: statusPillStyle },
-              React.createElement(Text, null, statusLabel)
+              React.createElement(Text, null, vm.statusInfo.label)
             )
           ),
-          React.createElement(Text, { style: styles.invoiceTitle }, invoice.status === "PAID" ? "PAID" : invoice.status === "VOID" ? "VOID" : "AMOUNT DUE"),
-          React.createElement(Text, { style: styles.invoiceNumber }, invoice.invoiceNumber),
-          React.createElement(Text, { style: styles.amountDueLabel }, "Total"),
-          React.createElement(Text, { style: styles.amountDue }, fmtMoney(total))
+          React.createElement(View, { style: styles.amountDueBlock },
+            React.createElement(Text, { style: styles.amountDueLabel }, "Total Due"),
+            React.createElement(Text, { style: styles.amountDue }, vm.formattedTotalAmount)
+          )
         )
       ),
 
@@ -427,135 +697,110 @@ export async function renderInvoicePdfToBuffer(
       React.createElement(View, { style: styles.parties },
         React.createElement(View, { style: styles.partyCard },
           React.createElement(Text, { style: styles.partyLabel }, "From"),
-          React.createElement(Text, { style: styles.partyName }, settings.companyName),
-          settings.companyEmail
-            ? React.createElement(Link, { src: `mailto:${settings.companyEmail}`, style: styles.partyLink }, settings.companyEmail)
-            : null,
-          settings.companyPhone
-            ? React.createElement(Text, { style: styles.partyLine }, settings.companyPhone)
-            : null,
-          settings.companyAddress
-            ? React.createElement(Text, { style: styles.partyLine }, settings.companyAddress)
-            : null
+          React.createElement(Text, { style: styles.partyName }, vm.seller.name),
+          vm.seller.email ? React.createElement(Link, { src: `mailto:${vm.seller.email}`, style: styles.partyLink }, vm.seller.email) : null,
+          vm.seller.phone ? React.createElement(Text, { style: styles.partyLine }, vm.seller.phone) : null,
+          vm.seller.address ? React.createElement(Text, { style: styles.companyLine }, vm.seller.address) : null
         ),
         React.createElement(View, { style: [styles.partyCard, styles.partyCardBillTo] },
           React.createElement(Text, { style: [styles.partyLabel, styles.partyLabelBillTo] }, "Bill To"),
-          React.createElement(Text, { style: styles.partyName }, invoice.client.name),
-          invoice.client.email
-            ? React.createElement(Link, { src: `mailto:${invoice.client.email}`, style: styles.partyLink }, invoice.client.email)
-            : null,
-          clientPhone
-            ? React.createElement(Text, { style: styles.partyLine }, clientPhone)
-            : null,
-          invoice.client.address
-            ? React.createElement(Text, { style: styles.partyLine }, invoice.client.address)
-            : null
+          React.createElement(Text, { style: styles.partyName }, vm.customer.name),
+          vm.customer.email ? React.createElement(Link, { src: `mailto:${vm.customer.email}`, style: styles.partyLink }, vm.customer.email) : null,
+          vm.customer.phone ? React.createElement(Text, { style: styles.partyLine }, vm.customer.phone) : null,
+          vm.customer.address ? React.createElement(Text, { style: styles.companyLine }, vm.customer.address) : null,
+          vm.customer.gstin ? React.createElement(Text, { style: styles.partyLine }, `GSTIN: ${vm.customer.gstin}`) : null
         )
       ),
 
-      // Meta
+      // Dates & GST Meta
       React.createElement(View, { style: styles.meta },
         React.createElement(View, { style: styles.metaCell },
           React.createElement(Text, { style: styles.metaLabel }, "Issue Date"),
-          React.createElement(Text, { style: styles.metaValue }, fmtDate(issueDate))
+          React.createElement(Text, { style: styles.metaValue }, vm.formattedIssueDate)
         ),
         React.createElement(View, { style: styles.metaCell },
           React.createElement(Text, { style: styles.metaLabel }, "Due Date"),
-          React.createElement(Text, { style: styles.metaValue }, fmtDate(dueDate))
+          React.createElement(Text, { style: styles.metaValue }, vm.formattedDueDate)
         ),
         React.createElement(View, { style: styles.metaCellLast },
-          React.createElement(Text, { style: styles.metaLabel }, taxLabel),
-          React.createElement(Text, { style: styles.metaValue }, `${taxRate}%`)
+          React.createElement(Text, { style: styles.metaLabel }, `${vm.taxLabel} Rate`),
+          React.createElement(Text, { style: styles.metaValue }, `${vm.taxRate}%`)
         )
       ),
 
-      // Table
+      // Line Items Table with Repeated Header
       React.createElement(View, { style: styles.table },
-        React.createElement(View, { style: styles.tableHeader },
+        React.createElement(View, { style: styles.tableHeader, fixed: true },
           React.createElement(View, { style: styles.colIdx }, React.createElement(Text, { style: styles.tableHeaderCell }, "#")),
           React.createElement(View, { style: styles.colDesc }, React.createElement(Text, { style: styles.tableHeaderCell }, "Description")),
-          React.createElement(View, { style: styles.colQty }, React.createElement(Text, { style: styles.tableHeaderCell }, "Qty")),
-          React.createElement(View, { style: styles.colPrice }, React.createElement(Text, { style: styles.tableHeaderCell }, "Unit Price")),
-          React.createElement(View, { style: styles.colAmount }, React.createElement(Text, { style: styles.tableHeaderCell }, "Amount"))
+          React.createElement(View, { style: styles.colQty }, React.createElement(Text, { style: styles.tableHeaderCellRight }, "Qty")),
+          React.createElement(View, { style: styles.colUnit }, React.createElement(Text, { style: styles.tableHeaderCellCenter }, "Unit")),
+          React.createElement(View, { style: styles.colPrice }, React.createElement(Text, { style: styles.tableHeaderCellRight }, "Unit Price")),
+          React.createElement(View, { style: styles.colAmount }, React.createElement(Text, { style: styles.tableHeaderCellRight }, "Amount"))
         ),
-        ...invoice.items.map((it, i) => {
-          const numQty = Number(it.quantity);
-          const formattedQty = Number.isInteger(numQty)
-            ? String(numQty)
-            : numQty.toFixed(3).replace(/\.?0+$/, "");
-          const qtyLabel = it.unitName ? `${formattedQty} ${it.unitName}` : formattedQty;
-
-          const desc = it.fruitName
-            ? `${it.fruitName}${it.fruitVariety ? ` (${it.fruitVariety})` : ""}${
-                it.description &&
-                it.description !== it.fruitName &&
-                it.description !== `${it.fruitName} (${it.fruitVariety})`
-                  ? ` - ${it.description}`
-                  : ""
-              }`
-            : it.description;
-
-          const priceLabel = it.unitName
-            ? `${fmtMoney(Number(it.price))}/${it.unitName}`
-            : fmtMoney(Number(it.price));
-
-          return React.createElement(
+        ...vm.items.map((it, i) =>
+          React.createElement(
             View,
-            { key: it.id, style: i === invoice.items.length - 1 ? styles.tableRowLast : styles.tableRow },
-            React.createElement(View, { style: styles.colIdx }, React.createElement(Text, { style: styles.idxCell }, String(i + 1))),
-            React.createElement(View, { style: styles.colDesc }, React.createElement(Text, { style: styles.descCell }, desc)),
-            React.createElement(View, { style: styles.colQty }, React.createElement(Text, { style: styles.numCell }, qtyLabel)),
-            React.createElement(View, { style: styles.colPrice }, React.createElement(Text, { style: styles.numCell }, priceLabel)),
-            React.createElement(View, { style: styles.colAmount }, React.createElement(Text, { style: styles.numCellBold }, fmtMoney(Number(it.total))))
-          );
-        })
+            { key: it.id, style: i === vm.items.length - 1 ? styles.tableRowLast : styles.tableRow, wrap: false },
+            React.createElement(View, { style: styles.colIdx }, React.createElement(Text, { style: styles.idxCell }, String(it.idx))),
+            React.createElement(View, { style: styles.colDesc }, React.createElement(Text, { style: styles.descCell }, it.description)),
+            React.createElement(View, { style: styles.colQty }, React.createElement(Text, { style: styles.numCell }, it.formattedQuantity)),
+            React.createElement(View, { style: styles.colUnit }, React.createElement(Text, { style: styles.unitCell }, it.unitName || "-")),
+            React.createElement(View, { style: styles.colPrice }, React.createElement(Text, { style: styles.numCell }, it.formattedPrice)),
+            React.createElement(View, { style: styles.colAmount }, React.createElement(Text, { style: styles.numCellBold }, it.formattedTotal))
+          )
+        )
       ),
 
-      // Totals
-      React.createElement(View, { style: styles.totalsWrap },
+      // Totals Box
+      React.createElement(View, { style: styles.totalsWrap, wrap: false },
         React.createElement(View, { style: styles.totalsBox },
           React.createElement(View, { style: styles.totalRow },
             React.createElement(Text, { style: styles.totalLabel }, "Subtotal"),
-            React.createElement(Text, { style: styles.totalValue }, fmtMoney(subtotal))
+            React.createElement(Text, { style: styles.totalValue }, vm.formattedSubtotal)
           ),
-          discountAmount > 0
+          vm.hasDiscount
             ? React.createElement(View, { key: "disc", style: styles.totalRow },
                 React.createElement(Text, { style: [styles.totalLabel, { color: "#059669" }] }, "Discount"),
-                React.createElement(Text, { style: [styles.totalValue, { color: "#059669" }] }, `−${fmtMoney(discountAmount)}`)
+                React.createElement(Text, { style: [styles.totalValue, { color: "#059669" }] }, vm.formattedDiscount)
               )
             : null,
           React.createElement(View, { style: styles.totalRow },
-            React.createElement(Text, { style: styles.totalLabel }, `${taxLabel} (${taxRate}%)`),
-            React.createElement(Text, { style: styles.totalValue }, fmtMoney(taxAmount))
+            React.createElement(Text, { style: styles.totalLabel }, `${vm.taxLabel} (${vm.taxRate}%)`),
+            React.createElement(Text, { style: styles.totalValue }, vm.formattedTaxAmount)
           ),
           React.createElement(View, { style: styles.totalRowLast },
             React.createElement(Text, { style: styles.totalLabelBig }, "Total Due"),
-            React.createElement(Text, { style: styles.totalValueBig }, fmtMoney(total))
+            React.createElement(Text, { style: styles.totalValueBig }, vm.formattedTotalAmount)
           )
         )
       ),
 
       banner,
 
-      invoice.notes
-        ? React.createElement(View, { style: styles.notesCard, key: "notes" },
+      vm.notes
+        ? React.createElement(View, { style: styles.notesCard, key: "notes", wrap: false },
             React.createElement(Text, { style: styles.notesLabel }, "Notes / Terms"),
-            React.createElement(Text, { style: styles.notesText }, invoice.notes)
+            React.createElement(Text, { style: styles.notesText }, vm.notes)
           )
         : null,
 
-      // Footer
-      React.createElement(View, { style: styles.footer, fixed: true },
-        React.createElement(Text, { style: styles.footerCompany }, settings.companyName),
-        settings.companyEmail ? React.createElement(Text, { style: styles.footerEmail }, settings.companyEmail) : null,
-        React.createElement(Text, { style: styles.footerThanks }, "Thank you for your business!"),
-        React.createElement(View, { style: styles.footerMeta },
-          React.createElement(Text, null, invoice.invoiceNumber),
-          React.createElement(Text, null, new Date().toISOString().slice(0, 10))
-        )
+      // Footer with Page Numbers & Thank-you message
+      React.createElement(View, { style: styles.footer, fixed: true, wrap: false },
+        React.createElement(View, { style: styles.footerMainRow },
+          React.createElement(Text, { style: styles.footerThanks }, "Thank you for your business!")
+        ),
+        React.createElement(View, { style: styles.footerMetaRow },
+          React.createElement(Text, { style: styles.footerCompany }, vm.seller.name),
+          React.createElement(Text, { style: styles.footerMeta }, `${vm.invoiceNumber} • ${vm.formattedIssueDate}`)
+        ),
+        React.createElement(Text, {
+          style: styles.footerPageNum,
+          render: ({ pageNumber, totalPages }: any) => `Page ${pageNumber} of ${totalPages}`,
+        })
       )
     )
   );
 
-  return renderToBuffer(el);
+  return renderToBuffer(doc);
 }

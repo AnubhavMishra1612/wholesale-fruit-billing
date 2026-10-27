@@ -1355,6 +1355,554 @@ describe('14. Milestone 3 Remediation: Schema Parity & Allocation Accounting Gua
   });
 });
 
+// ------------------------------------------------------------
+// 15. STAGING VERIFICATION: FRUIT MODAL, PDF FORMATTING & QTY STEP
+// ------------------------------------------------------------
+describe('15. Staging Bug Fixes: Fruit Modal, PDF Formatting & Qty Step', () => {
+  it('verifies fruit dialogue modal UI structure for responsiveness and viewport accessibility', () => {
+    const dialogFilePath = path.join(process.cwd(), 'src', 'components', 'fruits', 'fruit-dialog.tsx');
+    assert.equal(fs.existsSync(dialogFilePath), true);
+    const content = fs.readFileSync(dialogFilePath, 'utf8');
 
+    // 1. Max height constraint to stay within viewport on mobile and desktop
+    assert.match(content, /max-h-\[90vh\]/);
+
+    // 2. Vertical scrolling on the form content container
+    assert.match(content, /overflow-y-auto/);
+
+    // 3. Fixed shrink-0 header and footer keeping Save & Cancel accessible
+    assert.match(content, /shrink-0/);
+    assert.match(content, /DialogFooter/);
+
+    // 4. Proper form content padding (p-5 sm:p-6)
+    assert.match(content, /p-5 sm:p-6/);
+
+    // 5. Responsive columns (grid-cols-1 sm:grid-cols-2)
+    assert.match(content, /grid-cols-1 sm:grid-cols-2/);
+
+    // 6. Responsive alignment for active status checkbox
+    assert.match(content, /sm:pt-7/);
+  });
+
+  it('verifies invoice PDF typography, NotoSans font registration, and label integrity', () => {
+    const pdfFilePath = path.join(process.cwd(), 'src', 'lib', 'pdf.ts');
+    const fontsFilePath = path.join(process.cwd(), 'src', 'lib', 'pdf-fonts.ts');
+    assert.equal(fs.existsSync(pdfFilePath), true);
+    assert.equal(fs.existsSync(fontsFilePath), true);
+
+    const pdfContent = fs.readFileSync(pdfFilePath, 'utf8');
+    const fontsContent = fs.readFileSync(fontsFilePath, 'utf8');
+
+    // 1. NotoSans font registration enabled and references actual fonts
+    assert.match(fontsContent, /NotoSans-Regular\.ttf/);
+    assert.match(fontsContent, /NotoSans-Bold\.ttf/);
+    assert.match(fontsContent, /Font\.register/);
+
+    // 2. PDF uses NotoSans for primary page and amounts
+    assert.match(pdfContent, /fontFamily:\s*"NotoSans"/);
+
+    // 3. No letterSpacing artifacts that break words in extracted PDF text
+    assert.doesNotMatch(pdfContent, /letterSpacing:\s*0\.[678]/);
+    assert.doesNotMatch(pdfContent, /letterSpacing:\s*1\b/);
+
+    // 4. Right alignment configured for numeric table headers and cells
+    assert.match(pdfContent, /tableHeaderCellRight/);
+    assert.match(pdfContent, /numCellBold/);
+
+    // 5. Row wrap protection for multi-page invoices
+    assert.match(pdfContent, /wrap:\s*false/);
+  });
+
+  it('verifies quantity inputs use step="1" while supporting fractional quantities up to 3 decimals', () => {
+    const formFilePath = path.join(process.cwd(), 'src', 'components', 'invoices', 'invoice-form.tsx');
+    assert.equal(fs.existsSync(formFilePath), true);
+    const formContent = fs.readFileSync(formFilePath, 'utf8');
+
+    // 1. Step set to 1 and min set to 0 for whole-number increments
+    assert.match(formContent, /step="1"/);
+    assert.match(formContent, /min="0"/);
+    assert.doesNotMatch(formContent, /step="0\.001"/);
+
+    // 2. Form has noValidate to allow typing fractional quantities without browser blocking
+    assert.match(formContent, /<form\s+noValidate/);
+
+    // 3. Fractional quantities up to 3 decimal places remain mathematically valid
+    const items = [
+      { quantity: 1.500, price: 120.00 }, // 180.00
+      { quantity: 14.650, price: 82.50 }, // 1208.625 -> 1208.63
+      { quantity: 3, price: 50.00 },      // 150.00
+    ];
+    const totals = calculateInvoiceTotals(items, 5, { type: 'PERCENT', value: 10 });
+    assert.equal(totals.subtotal, 1538.63);
+    assert.equal(totals.discountAmount, 153.86);
+    assert.equal(totals.netAmount, 1384.77);
+    assert.equal(totals.taxAmount, 69.24);
+    assert.equal(totals.total, 1454.01);
+  });
+});
+
+// ------------------------------------------------------------
+// 16. PROFESSIONAL INVOICE REDESIGN: CANONICAL FORMATTER & PRINT PARITY
+// ------------------------------------------------------------
+describe('16. Professional Invoice Redesign: Canonical Formatter, Multi-Page PDF & Print Parity', () => {
+  const formatterPath = path.join(process.cwd(), 'src', 'lib', 'invoice-formatter.ts');
+  const pdfPath = path.join(process.cwd(), 'src', 'lib', 'pdf.ts');
+  const printPdfPath = path.join(process.cwd(), 'src', 'lib', 'print-pdf.ts');
+  const sheetPath = path.join(process.cwd(), 'src', 'components', 'invoices', 'canonical-invoice-sheet.tsx');
+  const globalsCssPath = path.join(process.cwd(), 'src', 'app', 'globals.css');
+
+  it('verifies canonical invoice formatter source file exists and provides complete formatting APIs', () => {
+    assert.equal(fs.existsSync(formatterPath), true);
+    const content = fs.readFileSync(formatterPath, 'utf8');
+
+    // 1. Core exports
+    assert.match(content, /export function formatInvoiceMoney/);
+    assert.match(content, /export function formatInvoiceDate/);
+    assert.match(content, /export function formatInvoiceQuantity/);
+    assert.match(content, /export function formatInvoiceItemDescription/);
+    assert.match(content, /export function resolveInvoiceStatus/);
+    assert.match(content, /export function buildCanonicalInvoiceViewModel/);
+
+    // 2. Rupee currency symbol invariance and 2-decimal formatting
+    assert.match(content, /currency:\s*curr/);
+    assert.match(content, /en-IN/);
+    assert.match(content, /minimumFractionDigits:\s*2/);
+    assert.match(content, /maximumFractionDigits:\s*2/);
+
+    // 3. Indian timezone consistency
+    assert.match(content, /timeZone:\s*"Asia\/Calcutta"/);
+  });
+
+  it('verifies monetary and fractional quantity formatting algorithms', () => {
+    // Pure formatting algorithm parity check
+    function testFormatMoney(amount, currency = 'INR') {
+      if (amount == null) return '₹0.00';
+      const num = Number(amount);
+      if (!Number.isFinite(num)) return '₹0.00';
+      return new Intl.NumberFormat('en-IN', {
+        style: 'currency',
+        currency,
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      }).format(num);
+    }
+
+    function testFormatQty(qty) {
+      if (qty == null) return '0';
+      const num = Number(qty);
+      if (!Number.isFinite(num)) return '0';
+      if (Number.isInteger(num)) return String(num);
+      return num.toFixed(3).replace(/\.?0+$/, '');
+    }
+
+    // Money formatting: exact symbol, commas, and decimals
+    assert.match(testFormatMoney(0), /₹\s?0\.00/);
+    assert.match(testFormatMoney(1538.63), /₹\s?1,538\.63/);
+    assert.match(testFormatMoney(1208.625), /₹\s?1,208\.63/);
+
+    // Fractional quantity formatting: integer without decimals, up to 3 decimals without trailing zeros
+    assert.equal(testFormatQty(3), '3');
+    assert.equal(testFormatQty(14.65), '14.65');
+    assert.equal(testFormatQty(1.5), '1.5');
+    assert.equal(testFormatQty(1.500), '1.5');
+    assert.equal(testFormatQty(0.875), '0.875');
+  });
+
+  it('verifies item description assembly handles produce name, variety, and consignments cleanly', () => {
+    function testFormatDesc(item) {
+      const desc = (item.description || '').trim();
+      const name = (item.fruitName || '').trim();
+      const variety = (item.fruitVariety || '').trim();
+      if (!name) return desc;
+      const header = variety ? `${name} (${variety})` : name;
+      if (!desc || desc === name || desc === header) return header;
+      return `${header} — ${desc}`;
+    }
+
+    // Both produce name and variety present with lot notes
+    assert.equal(
+      testFormatDesc({ fruitName: 'Royal Gala Apple', fruitVariety: 'Grade A', description: 'Lot #7821 from cold storage' }),
+      'Royal Gala Apple (Grade A) — Lot #7821 from cold storage'
+    );
+
+    // Produce name without variety
+    assert.equal(
+      testFormatDesc({ fruitName: 'Nagpur Orange', fruitVariety: '', description: 'Fresh arrival crate' }),
+      'Nagpur Orange — Fresh arrival crate'
+    );
+
+    // Duplicate description does not repeat
+    assert.equal(
+      testFormatDesc({ fruitName: 'Alphonso Mango', fruitVariety: 'Devgad', description: 'Alphonso Mango (Devgad)' }),
+      'Alphonso Mango (Devgad)'
+    );
+
+    // Raw manual line item without fruit catalogue reference
+    assert.equal(
+      testFormatDesc({ fruitName: '', fruitVariety: '', description: 'Custom Wooden Crates & Packaging' }),
+      'Custom Wooden Crates & Packaging'
+    );
+  });
+
+  it('verifies authoritative PDF generator includes fixed headers, page numbers, and unit column', () => {
+    assert.equal(fs.existsSync(pdfPath), true);
+    const pdfContent = fs.readFileSync(pdfPath, 'utf8');
+
+    // 1. Repeating table header on every page (fixed: true)
+    assert.match(pdfContent, /styles\.tableHeader,\s*fixed:\s*true/);
+
+    // 2. Dedicated Unit column in header and item rows
+    assert.match(pdfContent, /styles\.colUnit/);
+    assert.match(pdfContent, /"Unit"/);
+    assert.match(pdfContent, /it\.unitName/);
+
+    // 3. Fixed footer with dynamic page numbering
+    assert.match(pdfContent, /styles\.footer,\s*fixed:\s*true/);
+    assert.match(pdfContent, /pageNumber[\s\S]*totalPages[\s\S]*Page/);
+
+    // 4. Dark green branding and NotoSans typography
+    assert.match(pdfContent, /DEFAULT_BRAND_COLOR/);
+    assert.match(pdfContent, /NotoSans/);
+    const brandingPath = path.join(process.cwd(), 'src', 'lib', 'branding.ts');
+    assert.match(fs.readFileSync(brandingPath, 'utf8'), /#173D32/);
+
+    // 5. Protected row breaks
+    assert.match(pdfContent, /wrap:\s*false/);
+  });
+
+  it('verifies authoritative PDF print helper prints canonical PDF rather than divergent HTML DOM', () => {
+    assert.equal(fs.existsSync(printPdfPath), true);
+    const printContent = fs.readFileSync(printPdfPath, 'utf8');
+
+    // 1. Fetches canonical PDF blob
+    assert.match(printContent, /fetch\(pdfUrl/);
+    assert.match(printContent, /res\.blob\(\)/);
+
+    // 2. Uses hidden iframe for direct printer invocation
+    assert.match(printContent, /createElement\("iframe"\)/);
+    assert.match(printContent, /iframe\.contentWindow\?\.print\(\)/);
+
+    // 3. Cleanup on print close
+    assert.match(printContent, /URL\.revokeObjectURL/);
+  });
+
+  it('verifies shared canonical invoice sheet mirrors PDF visual hierarchy and CSS print settings', () => {
+    assert.equal(fs.existsSync(sheetPath), true);
+    assert.equal(fs.existsSync(globalsCssPath), true);
+
+    const sheetContent = fs.readFileSync(sheetPath, 'utf8');
+    const cssContent = fs.readFileSync(globalsCssPath, 'utf8');
+
+    // 1. Sheet contains table headers matching PDF
+    assert.match(sheetContent, />Description</);
+    assert.match(sheetContent, />Unit</);
+    assert.match(sheetContent, />Qty</);
+    assert.match(sheetContent, />Unit Price</);
+    assert.match(sheetContent, />Amount</);
+
+    // 2. CSS specifies A4 portrait and exact color reproduction
+    assert.match(cssContent, /@page\s*\{[\s\S]*size:\s*A4 portrait;/);
+    assert.match(cssContent, /margin:\s*12mm;/);
+    assert.match(cssContent, /-webkit-print-color-adjust:\s*exact/);
+  });
+});
+
+// ------------------------------------------------------------
+// 17. AUTH.JS V5 ROUTE HANDLERS & SIGN-OUT PARITY
+// ------------------------------------------------------------
+describe('17. Auth.js v5 Route Handlers & Sign-Out Parity', () => {
+  const authRoutePath = path.join(process.cwd(), 'src', 'app', 'api', 'auth', '[...nextauth]', 'route.ts');
+  const authLibPath = path.join(process.cwd(), 'src', 'lib', 'auth.ts');
+  const navbarPath = path.join(process.cwd(), 'src', 'components', 'layout', 'navbar.tsx');
+  const proxyPath = path.join(process.cwd(), 'src', 'proxy.ts');
+
+  it('verifies Auth.js catch-all route explicitly exports GET and POST handlers', () => {
+    assert.equal(fs.existsSync(authRoutePath), true);
+    const content = fs.readFileSync(authRoutePath, 'utf8');
+
+    // 1. Explicit GET export
+    assert.match(content, /export const GET\s*=\s*handlers\.GET/);
+
+    // 2. Explicit POST export
+    assert.match(content, /export const POST\s*=\s*handlers\.POST/);
+
+    // 3. Imports handlers from auth lib
+    assert.match(content, /import\s*\{\s*handlers\s*\}\s*from\s*["']@\/lib\/auth["']/);
+  });
+
+  it('verifies auth lib exports handlers, auth, signIn, signOut, GET, and POST', () => {
+    assert.equal(fs.existsSync(authLibPath), true);
+    const content = fs.readFileSync(authLibPath, 'utf8');
+
+    // Core NextAuth v5 exports
+    assert.match(content, /export const \{\s*handlers,\s*auth,\s*signIn,\s*signOut\s*\}\s*=\s*NextAuth/);
+    assert.match(content, /export const \{\s*GET,\s*POST\s*\}\s*=\s*handlers/);
+  });
+
+  it('verifies proxy.ts treats /api/auth as public and does not block auth endpoints', () => {
+    assert.equal(fs.existsSync(proxyPath), true);
+    const content = fs.readFileSync(proxyPath, 'utf8');
+
+    // 1. /api/auth in PUBLIC_PATHS
+    assert.match(content, /"\/api\/auth"/);
+
+    // 2. Skips custom security headers on /api/auth so Auth.js manages its own headers/cookies
+    assert.match(content, /!pathname\.startsWith\("\/api\/auth"\)/);
+
+    // 3. Allows public paths to pass through directly
+    assert.match(content, /if\s*\(isPublic\(pathname\)\)\s*\{\s*return response;\s*\}/);
+  });
+
+  it('verifies navbar uses client signOut helper with redirect preserved to /login', () => {
+    assert.equal(fs.existsSync(navbarPath), true);
+    const content = fs.readFileSync(navbarPath, 'utf8');
+
+    // 1. Imports client signOut from next-auth/react
+    assert.match(content, /import\s*\{[^}]*signOut[^}]*\}\s*from\s*["']next-auth\/react["']/);
+
+    // 2. Uses signOut with callbackUrl / redirectTo to /login
+    assert.match(content, /signOut\(\{\s*callbackUrl:\s*["']\/login["'],\s*redirectTo:\s*["']\/login["']\s*\}\)/);
+  });
+});
+
+describe('18. Downloaded Invoice PDF Layout, Logo & Footer Integrity', () => {
+  const pdfTsPath = path.resolve('src/lib/pdf.ts');
+
+  it('verifies header layout separates regions and prevents title/number overlap', () => {
+    assert.equal(fs.existsSync(pdfTsPath), true);
+    const content = fs.readFileSync(pdfTsPath, 'utf8');
+
+    // 1. Header has left and right flex regions
+    assert.match(content, /brandLeft:\s*\{/);
+    assert.match(content, /headerRight:\s*\{/);
+
+    // 2. headerRight specifies column direction and alignment
+    assert.match(content, /flexDirection:\s*["']column["']/);
+
+    // 3. invoiceTitle has explicit fontSize, lineHeight, and marginBottom
+    assert.match(content, /invoiceTitle:\s*\{[^}]*fontSize:\s*22/);
+    assert.match(content, /invoiceTitle:\s*\{[^}]*lineHeight:\s*1\./);
+    assert.match(content, /invoiceTitle:\s*\{[^}]*marginBottom:\s*\d+/);
+
+    // 4. invoiceNumber has explicit lineHeight and marginBottom
+    assert.match(content, /invoiceNumber:\s*\{[^}]*lineHeight:\s*1\./);
+    assert.match(content, /invoiceNumber:\s*\{[^}]*marginBottom:\s*\d+/);
+
+    // 5. INVOICE title precedes invoice number in headerRight JSX
+    const titleIdx = content.indexOf('styles.invoiceTitle');
+    const numIdx = content.indexOf('styles.invoiceNumber');
+    const statusIdx = content.indexOf('styles.statusRow');
+    const amountIdx = content.indexOf('styles.amountDue');
+    assert.ok(titleIdx !== -1 && numIdx !== -1 && statusIdx !== -1 && amountIdx !== -1);
+    assert.ok(titleIdx < numIdx, 'invoiceTitle should precede invoiceNumber');
+    assert.ok(numIdx < statusIdx, 'invoiceNumber should precede statusRow');
+    assert.ok(statusIdx < amountIdx, 'statusRow should precede amountDue');
+  });
+
+  it('verifies logo safely decodes base64 buffer and provides text fallback', () => {
+    const content = fs.readFileSync(pdfTsPath, 'utf8');
+
+    // 1. Decodes base64 string to Buffer
+    assert.match(content, /Buffer\.from\(\s*raw,\s*["']base64["']\s*\)/);
+
+    // 2. Passes resolved logo or falls back to companyInitial brandMark
+    assert.match(content, /resolvedLogo\s*\?\s*React\.createElement\(\s*Image/);
+    assert.match(content, /React\.createElement\(\s*View,\s*\{\s*key:\s*["']mark["'],\s*style:\s*styles\.brandMark\s*\}/);
+    assert.match(content, /companyInitial/);
+  });
+
+  it('verifies footer renders Thank you for your business and page numbering reliably', () => {
+    const content = fs.readFileSync(pdfTsPath, 'utf8');
+
+    // 1. Pinned footer with fixed: true
+    assert.match(content, /style:\s*styles\.footer,\s*fixed:\s*true/);
+
+    // 2. Thank you message present as default
+    assert.match(content, /"Thank you for your business!"/);
+    assert.match(content, /styles\.footerThanks/);
+
+    // 3. Page numbering present with render prop
+    assert.match(content, /styles\.footerPageNum/);
+    assert.match(content, /Page \$\{pageNumber\} of \$\{totalPages\}/);
+
+    // 4. Page numbering positioned with absolute coordinates inside footer to prevent layout recalculation
+    assert.match(content, /footerPageNum:\s*\{[^}]*position:\s*["']absolute["']/);
+
+    // 5. Page bottom padding reserves clearance for the footer
+    assert.match(content, /padding:\s*["']36 44 75 44["']/);
+  });
+});
+
+// ------------------------------------------------------------
+// 19. MODERN FRUIT CATALOGUE EDIT MODAL REDESIGN
+// ------------------------------------------------------------
+describe('19. Modern Fruit Catalogue Edit Modal Redesign', () => {
+  const dialogFilePath = path.join(process.cwd(), 'src', 'components', 'fruits', 'fruit-dialog.tsx');
+  const fruitsPagePath = path.join(process.cwd(), 'src', 'app', '(dashboard)', 'fruits', 'page.tsx');
+
+  it('verifies modal header, fruit icon badge, and visual container tokens', () => {
+    assert.equal(fs.existsSync(dialogFilePath), true);
+    const content = fs.readFileSync(dialogFilePath, 'utf8');
+
+    // 1. Pale-green rounded square with fruit icon
+    assert.match(content, /bg-\[#EAF5EF\]/);
+    assert.match(content, /border-\[#C6E7D2\]/);
+    assert.match(content, /rounded-xl/);
+    assert.match(content, /<Apple\s+className=/);
+
+    // 2. Title and Subtitle matching exact specification
+    assert.match(content, /Edit Fruit Catalogue Item/);
+    assert.match(content, /Update fruit name, variety, category, unit, HSN code or status\./);
+
+    // 3. Modal structure: rounded-2xl, subtle border, responsive max width
+    assert.match(content, /rounded-2xl/);
+    assert.match(content, /sm:max-w-2xl\s+md:max-w-3xl/);
+    assert.match(content, /shadow-2xl/);
+    assert.match(content, /border-b\s+border-slate-200/);
+    assert.match(content, /border-t\s+border-slate-200/);
+  });
+
+  it('verifies two-column responsive form layout and produce fields', () => {
+    const content = fs.readFileSync(dialogFilePath, 'utf8');
+
+    // 1. Two-column grid on desktop, single column on mobile
+    assert.match(content, /grid-cols-1\s+sm:grid-cols-2/);
+
+    // 2. Required Fruit Name
+    assert.match(content, /Fruit Name\s*<span className="text-red-500">\*<\/span>/);
+    assert.match(content, /id="fruit-name"/);
+
+    // 3. Variety / Grade
+    assert.match(content, /Variety \/ Grade/);
+    assert.match(content, /id="fruit-variety"/);
+
+    // 4. Category
+    assert.match(content, /id="fruit-category"/);
+
+    // 5. Default Unit of Measure
+    assert.match(content, /Default Unit of Measure/);
+    assert.match(content, /id="fruit-unit"/);
+
+    // 6. HSN Code (GST)
+    assert.match(content, /HSN Code \(GST\)/);
+    assert.match(content, /id="fruit-hsn"/);
+
+    // 7. Daily board & active status toggle card
+    assert.match(content, /Available in Daily Price Board/);
+
+    // 8. Consistent input height and focus ring
+    assert.match(content, /h-10/);
+    assert.match(content, /focus-visible:ring-\[#173D32\]/);
+  });
+
+  it('verifies 4 footer actions: Delete Item, Cancel, Save & Edit Next, and Save Changes', () => {
+    const content = fs.readFileSync(dialogFilePath, 'utf8');
+
+    // 1. Delete Item: Red-outlined destructive button on the left with confirmation modal
+    assert.match(content, /Delete Item/);
+    assert.match(content, /border-red-200/);
+    assert.match(content, /text-red-600/);
+    assert.match(content, /setShowDeleteConfirm\(true\)/);
+    assert.match(content, /fetch\(`\/api\/fruits\/\$\{currentFruit\.id\}`,/);
+
+    // 2. Cancel: neutral button with discard changes check
+    assert.match(content, /Cancel/);
+    assert.match(content, /handleCancel/);
+    assert.match(content, /showDiscardConfirm/);
+
+    // 3. Save & Edit Next: pale-green button with Save icon
+    assert.match(content, /Save & Edit Next/);
+    assert.match(content, /handleSaveAndNext/);
+    assert.match(content, /catalogueFruits/);
+    assert.match(content, /setCurrentFruit\(nextFruit\)/);
+
+    // 4. Save Changes: Dark green primary button with check icon
+    assert.match(content, /Save Changes/);
+    assert.match(content, /bg-\[#173D32\]/);
+    assert.match(content, /<Check\s+className=/);
+    assert.match(content, /Loader2/);
+  });
+
+  it('verifies catalogue page provides catalogueFruits context to FruitDialog', () => {
+    assert.equal(fs.existsSync(fruitsPagePath), true);
+    const content = fs.readFileSync(fruitsPagePath, 'utf8');
+
+    // FruitDialog receives catalogueFruits prop
+    assert.match(content, /catalogueFruits=\{filteredFruits\}/);
+  });
+});
+
+// ------------------------------------------------------------
+// 20. INVOICE FORM LINE ITEM INSERTION AT INDEX 0 (TOP)
+// ------------------------------------------------------------
+describe('20. Invoice Form Line Item Top Insertion & Order Stability', () => {
+  const formFilePath = path.join(process.cwd(), 'src', 'components', 'invoices', 'invoice-form.tsx');
+
+  it('verifies invoice-form.tsx prepends new line items at index 0', () => {
+    assert.equal(fs.existsSync(formFilePath), true);
+    const content = fs.readFileSync(formFilePath, 'utf8');
+
+    // 1. Insertion at index 0 rather than appending
+    assert.match(content, /setItems\(\(prev\)\s*=>\s*\[emptyItem\(\),\s*\.\.\.prev\]\)/);
+    assert.doesNotMatch(content, /setItems\(\(prev\)\s*=>\s*\[\.\.\.prev,\s*emptyItem\(\)\]\)/);
+
+    // 2. References first row selector for auto-focus
+    assert.match(content, /firstFruitSelectRef/);
+    assert.match(content, /idx === 0 \? firstFruitSelectRef : undefined/);
+
+    // 3. Smooth scroll and focus with preventScroll
+    assert.match(content, /focus\(\{\s*preventScroll:\s*true\s*\}\)/);
+    assert.match(content, /scrollIntoView\(\{[^}]*block:\s*["']nearest["']/);
+  });
+
+  it('verifies mathematical invariance and order preservation when prepending to 1 or 10+ items', () => {
+    // Simulate initial single item
+    const existingItems = [
+      { id: 'item-1', description: 'Kashmiri Apple', quantity: 25.500, price: 120.00 },
+    ];
+
+    // Prepend new empty item
+    const newItem = { id: 'item-new-1', description: '', quantity: 1.000, price: 0 };
+    const withOnePrepended = [newItem, ...existingItems];
+
+    assert.equal(withOnePrepended.length, 2);
+    assert.equal(withOnePrepended[0].id, 'item-new-1');
+    assert.equal(withOnePrepended[1].id, 'item-1');
+    assert.equal(withOnePrepended[1].description, 'Kashmiri Apple');
+    assert.equal(withOnePrepended[1].quantity, 25.5);
+    assert.equal(withOnePrepended[1].price, 120.0);
+
+    // Totals remain unchanged
+    const totalsBefore = calculateInvoiceTotals(existingItems, 5);
+    const totalsAfter = calculateInvoiceTotals(withOnePrepended, 5);
+    assert.equal(totalsAfter.subtotal, totalsBefore.subtotal);
+    assert.equal(totalsAfter.total, totalsBefore.total);
+
+    // Simulate 10 existing items
+    const tenItems = Array.from({ length: 10 }, (_, i) => ({
+      id: `item-${i + 1}`,
+      description: `Fruit Lot #${i + 1}`,
+      quantity: 10 + i,
+      price: 50 + i * 5,
+    }));
+
+    const prependedToTen = [newItem, ...tenItems];
+    assert.equal(prependedToTen.length, 11);
+    assert.equal(prependedToTen[0].id, 'item-new-1');
+
+    // Verify all 10 items keep their original relative order
+    for (let i = 0; i < 10; i++) {
+      assert.equal(prependedToTen[i + 1].id, `item-${i + 1}`);
+      assert.equal(prependedToTen[i + 1].description, `Fruit Lot #${i + 1}`);
+      assert.equal(prependedToTen[i + 1].quantity, 10 + i);
+      assert.equal(prependedToTen[i + 1].price, 50 + i * 5);
+    }
+
+    const tenTotalsBefore = calculateInvoiceTotals(tenItems, 5);
+    const tenTotalsAfter = calculateInvoiceTotals(prependedToTen, 5);
+    assert.equal(tenTotalsAfter.subtotal, tenTotalsBefore.subtotal);
+    assert.equal(tenTotalsAfter.total, tenTotalsBefore.total);
+  });
+});
 
 

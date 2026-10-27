@@ -11,6 +11,8 @@
  */
 import path from "node:path";
 
+import fs from "node:fs";
+
 type FontLike = {
   register: (opts: unknown) => void;
 };
@@ -18,17 +20,21 @@ type FontLike = {
 let registered = false;
 
 export async function registerPdfFonts(Font: FontLike): Promise<void> {
-  void Font;
   if (registered) return;
   try {
-    // Font registration is currently disabled because @react-pdf/renderer v4
-    // has issues loading TTF files that don't match its fontkit expectations
-    // ("f is not a function" deep in layout). The TTF files are kept in
-    // src/assets/fonts/ for future enablement when the library issue is
-    // resolved or we switch to a pre-subsetted font.
-    // Mark as "registered" so we don't retry on every PDF render.
-    registered = true;
-    return;
+    const regularPath = getFontPath("NotoSans-Regular.ttf");
+    const boldPath = getFontPath("NotoSans-Bold.ttf");
+
+    if (fs.existsSync(regularPath) && fs.existsSync(boldPath)) {
+      Font.register({
+        family: "NotoSans",
+        fonts: [
+          { src: regularPath, fontWeight: "normal" },
+          { src: boldPath, fontWeight: "bold" },
+        ],
+      });
+      registered = true;
+    }
   } catch (e) {
     console.warn("[pdf-fonts] Failed to register NotoSans:", (e as Error).message);
   }

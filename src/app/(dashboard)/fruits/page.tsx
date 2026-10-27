@@ -30,6 +30,8 @@ export default function FruitsPage() {
   const [search, setSearch] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string>("ALL");
   const [showArchived, setShowArchived] = useState(false);
+  const [selectedFruit, setSelectedFruit] = useState<FruitData | null>(null);
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
 
   const fetchFruits = useCallback(async () => {
     setLoading(true);
@@ -137,7 +139,16 @@ export default function FruitsPage() {
 
         <div className="flex flex-wrap items-center gap-2">
           <UnitDialog onUnitsChanged={fetchFruits} />
-          <FruitDialog onSuccess={fetchFruits} />
+          <Button
+            onClick={() => {
+              setSelectedFruit(null);
+              setIsDialogOpen(true);
+            }}
+            className="gap-2 bg-[#173D32] hover:bg-[#1e4d3f] text-white shadow-sm"
+          >
+            <Plus className="h-4 w-4" />
+            Add Fruit
+          </Button>
         </div>
       </div>
 
@@ -233,7 +244,16 @@ export default function FruitsPage() {
           </p>
           {!search && (
             <div className="mt-4">
-              <FruitDialog onSuccess={fetchFruits} />
+              <Button
+                onClick={() => {
+                  setSelectedFruit(null);
+                  setIsDialogOpen(true);
+                }}
+                className="gap-2 bg-[#173D32] hover:bg-[#1e4d3f] text-white shadow-sm"
+              >
+                <Plus className="h-4 w-4" />
+                Add Fruit
+              </Button>
             </div>
           )}
         </Card>
@@ -292,20 +312,18 @@ export default function FruitsPage() {
                   </span>
 
                   <div className="flex items-center gap-1">
-                    <FruitDialog
-                      fruit={fruit}
-                      onSuccess={fetchFruits}
-                      trigger={
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-8 w-8 p-0 text-slate-500 hover:text-[#173D32]"
-                          title="Edit fruit details"
-                        >
-                          <Pencil className="h-3.5 w-3.5" />
-                        </Button>
-                      }
-                    />
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        setSelectedFruit(fruit);
+                        setIsDialogOpen(true);
+                      }}
+                      className="h-8 w-8 p-0 text-slate-500 hover:text-[#173D32]"
+                      title="Edit fruit details"
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </Button>
 
                     {!fruit.isArchived && (
                       <Button
@@ -347,6 +365,16 @@ export default function FruitsPage() {
           ))}
         </div>
       )}
+
+      {/* Single Edit / Create Fruit Catalogue Modal */}
+      <FruitDialog
+        open={isDialogOpen}
+        onOpenChange={setIsDialogOpen}
+        fruit={selectedFruit}
+        onFruitChange={setSelectedFruit}
+        catalogueFruits={filteredFruits}
+        onSuccess={fetchFruits}
+      />
     </div>
   );
 }

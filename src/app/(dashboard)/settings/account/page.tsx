@@ -152,7 +152,7 @@ export default function AccountSettingsPage() {
         { keepDirty: false }
       );
       if (passwordChanged) {
-        setTimeout(() => signOut({ callbackUrl: "/login" }), 1500);
+        setTimeout(() => signOut({ callbackUrl: "/login", redirectTo: "/login" }), 1500);
       } else {
         router.refresh();
       }
@@ -186,7 +186,7 @@ export default function AccountSettingsPage() {
       toast.success("Account deleted", {
         description: "We're sorry to see you go.",
       });
-      await signOut({ callbackUrl: "/login" });
+      await signOut({ callbackUrl: "/login", redirectTo: "/login" });
     } catch {
       toast.error("Network error — please try again");
     } finally {

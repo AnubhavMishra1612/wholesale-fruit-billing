@@ -51,7 +51,7 @@ function UserMenu({ email, name }: { email: string; name?: string | null }) {
     .toUpperCase();
 
   async function handleSignOut() {
-    await signOut({ callbackUrl: "/login" });
+    await signOut({ callbackUrl: "/login", redirectTo: "/login" });
   }
 
   return (
